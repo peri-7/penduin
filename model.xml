@@ -1,0 +1,48 @@
+<mujoco model="penduin">
+
+	<compiler angle="degree" meshdir="./STLs"/>
+
+	<option timestep="0.002" integrator="implicitfast"/>
+
+	<asset>
+		<!-- STL files  -->
+		<mesh name="arm_mesh" file="arm2.stl"/>
+		<mesh name="pendulum_mesh" file="pendulum_coins.stl"/>
+		<mesh name="motor_mesh" file="body2.stl"/>
+	</asset>
+
+	<default>
+		<geom type="mesh" contype="0" conaffinity="0"/>
+	</default>
+
+	<worldbody>
+		<light pos="0 0 0.5" dir="0 0 -1"/>
+
+		<!-- Link 1: motor  -->
+		<body name="motor" pos="0 0 0.024284">
+			<geom mesh="motor_mesh" rgba="0.2 0.2 0.2 1"/>
+
+			<!-- Link 2: arm -->
+			<body name="arm" pos="0 0 0.01">
+				<joint name="motor" type="hinge" axis="0 0 1" limited="true" range="-120 120" armature="0.0000068"/>
+				<inertial pos="0.0524 0.000012 0.010774" mass="0.025" fullinertia="0.00000282 0.000014048 0.000013847 -0.000000001 -0.000002244 -0.000000001"/>
+				<geom mesh="arm_mesh" rgba="1 0.4 0 1"/>
+
+				<!-- Link 3: pendulum -->
+				<body name="pendulum" pos="0.062 0 0.014" xyaxes="0 0 -1 0 1 0">
+					<joint name="bearing" type="hinge" axis="0 0 1" damping="0.0001"/>
+					<inertial pos="-0.074141 0 0.014052" mass="0.023" fullinertia="0.000001186 0.000014564 0.000015055 0 0.000000253 0"/>
+					<geom mesh="pendulum_mesh" xyaxes="0 0 1 0 1 0" rgba="0 0.4 1 1"/>
+					
+				</body>
+			</body>
+		</body>
+	</worldbody>
+
+	<actuator>
+		<!-- stepper as velocity control: ctrl = arm speed (rad/s), set ctrlrange from your driver's max step rate.
+		     kv is stiff (arm settles in ~3 ms); forcerange caps torque below the 42BYGHW804's 0.48 N*m holding torque -->
+		<velocity name="motor" joint="motor" kv="0.05" ctrlrange="-20 20" forcelimited="true" forcerange="-0.4 0.4"/>
+	</actuator>
+
+</mujoco>
