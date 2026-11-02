@@ -1,0 +1,54 @@
+
+.program stepper
+
+;first read
+pull block              ;value put into osr
+mov x, osr
+
+.wrap_target
+
+    ;N + 8 cc delay
+
+    loop_read:
+        pull noblock        ;if no value in FIFO then x moved into osr
+        mov x, osr          ;refresh x for next empty read
+
+        out pins, 1         ;set dir   
+
+        out y, 31           ;read velocity
+
+        jmp !y loop_read    ;check if velocity is 0
+
+        set pins, 1          
+        set pins, 0
+
+    wait_next_step:
+        jmp y-- wait_next_step  
+.wrap
+
+% c-sdk {
+
+static inline void stepper_program_init(PIO pio, uint sm, uint offset, uint out_pin, uint set_pin, float clkdiv) {
+   
+    pio_sm_config c = stepper_program_get_default_config(offset);
+
+    pio_gpio_init(pio, set_pin);
+    pio_gpio_init(pio, out_pin);
+
+    uint32_t mask = (1u << out_pin) | (1u << set_pin);
+    pio_sm_set_pins_with_mask(pio, sm, 0, mask);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, set_pin, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, out_pin, 1, true);
+
+    sm_config_set_out_pins(&c, out_pin, 1);
+    sm_config_set_set_pins(&c, set_pin, 1);
+
+    sm_config_set_clkdiv(&c, clkdiv);
+
+    sm_config_set_out_shift(&c, true, false, 32);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
