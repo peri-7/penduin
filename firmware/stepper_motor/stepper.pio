@@ -19,7 +19,7 @@ mov x, osr
 
         jmp !y loop_read    ;check if velocity is 0
 
-        set pins, 1          
+        set pins, 1   
         set pins, 0
 
     wait_next_step:
