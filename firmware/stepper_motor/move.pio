@@ -1,5 +1,5 @@
-
-.program stepper
+; program to send dir and step from main to TMC2209
+.program move
 
 ;first read
 pull block              ;value put into osr
@@ -28,9 +28,9 @@ mov x, osr
 
 % c-sdk {
 
-static inline void stepper_program_init(PIO pio, uint sm, uint offset, uint out_pin, uint set_pin, float clkdiv) {
+static inline void move_program_init(PIO pio, uint sm, uint offset, uint out_pin, uint set_pin, float clkdiv) {
    
-    pio_sm_config c = stepper_program_get_default_config(offset);
+    pio_sm_config c = move_program_get_default_config(offset);
 
     pio_gpio_init(pio, set_pin);
     pio_gpio_init(pio, out_pin);

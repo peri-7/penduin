@@ -1,0 +1,50 @@
+; program to save steps and dir and send back to main
+
+.program read
+
+.wrap_target
+
+	wait 1 pin 0  		; a step was made
+	jmp pin dir_1 	 	; check direction
+
+	; if dir=0 -> decreament counter
+	dir_0:
+		jmp x-- done
+		jmp done
+
+	: else -> increment counter with compliment trick
+	dir_1:
+		mov x, ~x
+		jmp x-- compl
+
+	coompl:
+		mov x, ~x
+
+	done:
+		wait pin 0 pin 0
+		mov isr, x
+		push		
+.wrap
+
+
+% c-sdk {
+
+static inline void read_program_init(PIO pio, uint sm, uint offset, uint jmp_pin, uint in_pin, float clkdiv) {
+   
+    pio_sm_config c = move_program_get_default_config(offset);
+
+    pio_gpio_init(pio, jmp_pin);
+    pio_gpio_init(pio, in_pin);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, jmp_pin, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, in_pin, 1, true);
+
+    sm_config_set_in_pins(&c, in_pin, 1);
+    sm_config_set_jmp_pins(&c, jmp_pin, 1);
+
+    sm_config_set_clkdiv(&c, clkdiv);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

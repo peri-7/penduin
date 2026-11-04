@@ -2,7 +2,8 @@
 #include <math.h>
 #include <pico/stdlib.h>
 #include <hardware/pio.h>
-#include "stepper.pio.h"
+#include "move.pio.h"
+#include "stepper.h"
 
 #define PI 3.14159265f
 
@@ -24,29 +25,14 @@
 #define T_HOLD 200
 #define T_PAUSE 50                    // standstill before reversing
 
-void init_stepper_pio(PIO *pio, uint *state_machine_id){
+void init_move_pio(PIO *pio, uint *state_machine_id){
     *pio = pio0;
     *state_machine_id = pio_claim_unused_sm(pio0, true);
-    uint offset = pio_add_program(*pio, &stepper_program);
-    stepper_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, 150.0f); // TODO: clock_get_hz(clk_sys) / PIO_FREQ
+    uint offset = pio_add_program(*pio, &move_program);
+    move_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, 150.0f); // TODO: clock_get_hz(clk_sys) / PIO_FREQ
 }
 
-uint32_t speed_to_word(float v){
-    uint32_t res = 0, N;
-    if (v < 0) { res = 1; v = -v; } // dir bit
-    if (v < VMIN) return 0;
-    if (v > VMAX) v = VMAX;
-    float cc = 2*PI*PIO_FREQ / (STEPS_REV * v); // period in SM cycles
-    N = (uint32_t)lroundf(cc) - PIO_OVERHEAD;
-    res |= N << 1;
-    return res;
-}
 
-void set_speed(float v, PIO pio, uint sm){
-    uint32_t N = speed_to_word(v);
-    pio_sm_clear_fifos(pio, sm); 
-    pio_sm_put(pio, sm, N);
-}
 
 int main()
 {
@@ -54,7 +40,7 @@ int main()
     sleep_ms(2000); // open serial monitor
 
     PIO pio; uint sm;
-    init_stepper_pio(&pio, &sm);
+    init_move_pio(&pio, &sm);
 
     // Limits test. Each stage = (acceleration, top speed), run REPS times back and forth:
     // ramp to +v, hold, ramp to 0, ramp to -v, hold, ramp to 0. Net travel per stage is 0,
