@@ -34,13 +34,14 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(main main.c )
+add_executable(main main.c stepper.c)
 
 pico_set_program_name(main "main")
 pico_set_program_version(main "0.1")
 
 # Generate PIO header
-pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/stepper.pio)
+pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/move.pio)
+pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/read.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(main 0)

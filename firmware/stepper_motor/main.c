@@ -2,36 +2,32 @@
 #include <math.h>
 #include <pico/stdlib.h>
 #include <hardware/pio.h>
+#include <hardware/clocks.h>
 #include "move.pio.h"
+#include "read.pio.h"
 #include "stepper.h"
 
-#define PI 3.14159265f
 
 #define STEP_PIN 14
 #define DIR_PIN 15
-#define MICROSTEP 16
-#define STEPS_REV (200*MICROSTEP)
-#define VMAX 20.0f
-#define VMIN 0.01f      // below this the motor stops (dead band); also absorbs float round-off
 #define DT_US 10000
 #define DT (DT_US * 1e-6f)
-#define PIO_FREQ 1000000.0f // SM cycles per second: 150 MHz / clkdiv 150
-#define PIO_OVERHEAD 8      // cycles per period outside the wait loop: period = N + 8
 
-// Test profile (in control ticks of 10 ms)
-#define V_TEST (2*PI)                 // 1 rev/s
-#define A_TEST (V_TEST / 0.5f)        // reach V_TEST in 0.5 s
-#define T_RAMP 50
-#define T_HOLD 200
-#define T_PAUSE 50                    // standstill before reversing
 
 void init_move_pio(PIO *pio, uint *state_machine_id){
     *pio = pio0;
     *state_machine_id = pio_claim_unused_sm(pio0, true);
     uint offset = pio_add_program(*pio, &move_program);
-    move_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, 150.0f); // TODO: clock_get_hz(clk_sys) / PIO_FREQ
+    float factor = clock_get_hz(clk_sys) / PIO_FREQ;
+    move_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, factor); 
 }
 
+void init_read_pio(PIO *pio, uint *state_machine_id){
+    *pio = pio0;
+    *state_machine_id = pio_claim_unused_sm(pio0, true);
+    uint offset = pio_add_program(*pio, &read_program);
+    read_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, 1.0f); 
+}
 
 
 int main()
@@ -39,8 +35,9 @@ int main()
     stdio_init_all();
     sleep_ms(2000); // open serial monitor
 
-    PIO pio; uint sm;
-    init_move_pio(&pio, &sm);
+    PIO pio; uint sm0, sm1;
+    init_move_pio(&pio, &sm0);
+    init_read_pio(&pio, &sm1);
 
     // Limits test. Each stage = (acceleration, top speed), run REPS times back and forth:
     // ramp to +v, hold, ramp to 0, ramp to -v, hold, ramp to 0. Net travel per stage is 0,
@@ -67,7 +64,7 @@ int main()
         next = delayed_by_us(next, DT_US);
 
         if (stage >= n_stages) {  // all stages done: stay stopped
-            set_speed(0, pio, sm);
+            set_speed(0, pio, sm0);
             sleep_until(next);
             continue;
         }
@@ -104,7 +101,7 @@ int main()
             break;
         }
 
-        set_speed(v, pio, sm);
+        set_speed(v, pio, sm0);
 
         if (tick % 50 == 0) {
             uint32_t w = speed_to_word(v);

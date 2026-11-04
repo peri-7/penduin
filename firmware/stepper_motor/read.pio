@@ -1,6 +1,8 @@
 ; program to save steps and dir and send back to main
 
+.pio_version 1
 .program read
+.fifo txput
 
 .wrap_target
 
@@ -12,18 +14,18 @@
 		jmp x-- done
 		jmp done
 
-	: else -> increment counter with compliment trick
+	; else -> increment counter with compliment trick
 	dir_1:
 		mov x, ~x
 		jmp x-- compl
 
-	coompl:
+	compl:
 		mov x, ~x
 
 	done:
-		wait pin 0 pin 0
+		wait 0 pin 0
 		mov isr, x
-		push		
+		mov rxfifo[0], isr		
 .wrap
 
 
@@ -31,20 +33,18 @@
 
 static inline void read_program_init(PIO pio, uint sm, uint offset, uint jmp_pin, uint in_pin, float clkdiv) {
    
-    pio_sm_config c = move_program_get_default_config(offset);
+    pio_sm_config c = read_program_get_default_config(offset);
 
     pio_gpio_init(pio, jmp_pin);
     pio_gpio_init(pio, in_pin);
 
-    pio_sm_set_consecutive_pindirs(pio, sm, jmp_pin, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, in_pin, 1, true);
-
-    sm_config_set_in_pins(&c, in_pin, 1);
-    sm_config_set_jmp_pins(&c, jmp_pin, 1);
+    sm_config_set_in_pins(&c, in_pin);
+    sm_config_set_jmp_pin(&c, jmp_pin);
 
     sm_config_set_clkdiv(&c, clkdiv);
 
     pio_sm_init(pio, sm, offset, &c);
+	pio_sm_exec(pio, sm, pio_encode_set(pio_x, 0));
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
