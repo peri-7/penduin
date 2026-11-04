@@ -4,7 +4,7 @@ import mujoco
 
 class PenduinEnv(gym.Env):
 
-    def __init__(self, xml_path):
+    def __init__(self, xml_path, mode="quad"):
         super().__init__()
 
         # model from mujoco
@@ -18,7 +18,10 @@ class PenduinEnv(gym.Env):
         self.dt = self.frame_skip * self.model.opt.timestep
         self.max_accel = 200
         self.max_speed = self.model.actuator_ctrlrange[0, 1]
-
+        self.th_limit = np.pi/2
+        self.a_dot_denom = 20
+        self.mode = mode
+                
         # action space: u = [ theta_ddot ]
         self.action_space = gym.spaces.Box(
             low=-1, high=1, shape=(1,), dtype=np.float32
@@ -32,7 +35,6 @@ class PenduinEnv(gym.Env):
         )
         self.a_prev = 0
         self.speed = 0
-        self.th_limit = np.pi/2
         # self.cnt = 0
 
     def _read_alpha(self):
@@ -51,7 +53,7 @@ class PenduinEnv(gym.Env):
 
         # alpha dot (normalized) - empirically, might changed denominator later
         a_dot = ((a - self.a_prev + np.pi)%(2*np.pi) - np.pi)/self.dt
-        a_dot /= 20
+        a_dot /= self.a_dot_denom
         self.a_prev = a
 
         # theta (normalized)
@@ -64,11 +66,40 @@ class PenduinEnv(gym.Env):
  
 
     def _reward(self, obs, action): # [sina, cosa, th, a_dot, th_dot] (normalized)
-        Q, R = 0.05, 0.01
-        cosa, th = obs[1], obs[2]*self.th_limit
-        reward = (1+cosa)/2 - R*action**2 - Q*th**2
-        return float(reward)
 
+        sina, cosa, th, a_dot, th_dot = obs
+        a = np.arctan2(sina, cosa)
+        a_dot *= self.a_dot_denom
+        th *= self.th_limit
+        th_dot *= self.max_speed
+        
+        # positive quadratic (LQR inspired)
+        if self.mode == "quad":
+            Q, R = 0.05, 0.01
+            reward = (1+cosa)/2 - R*action**2 - Q*th**2
+
+        
+        # Gaussian/Exponential (PILCO: A Model-Based and Data-Efficient Approach to Policy Search) 
+        if self.mode == "exp":
+            Q, R = 0.05, 0.01
+            cost = ( a**2 + R*action**2 + Q*th**2 )
+            reward = np.exp(-cost)
+
+        '''
+        # l1 penalty 
+        Q, R = 0.05, 0.01
+        penalty = ( abs(a) + R*action**2 + Q*th**2 )
+        reward = 1 - penalty
+        # quanser qube
+        Q, R = 0.05, 0.01
+        penalty = ( a**2 + R*action**2 + Q*th**2 + R*(action-self.action_prev)**2)
+        reward = 1 - penalty
+        '''
+        
+        return float(reward)
+        
+        
+        
     def step(self, action):
         # action
         act = np.clip(action[0], a_min=-1, a_max=1)

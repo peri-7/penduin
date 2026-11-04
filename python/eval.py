@@ -61,6 +61,7 @@ if __name__ == "__main__":
     # i) read args: 1. file 2. watch
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", help="give model 's file path", required=True)
+    parser.add_argument("-m", "--mode", help="give agent 's reward function", required=True, choices=["quad", "exp"])
     parser.add_argument("-w", "--watch", help="option to watch on mujoco", action='store_true')
     args = parser.parse_args()
 
@@ -70,7 +71,7 @@ if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     xml = f"{here}/../model.xml"
     max_steps = 1000
-    env = PenduinEnv(xml_path=xml)
+    env = PenduinEnv(xml_path=xml, mode=args.mode)
     env = TimeLimit(env, max_episode_steps=max_steps)
 
     # iii) run the episode
