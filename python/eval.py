@@ -81,14 +81,34 @@ if __name__ == "__main__":
     else:
         a, th, th_dot, th_ddot, rew, t_log = run_episode(agent, env)
 
-    # iv) summary report
+    # iv) summary report + smoothness report
     up = [abs(x)<np.deg2rad(10) for x in a]
-    ts = t_log[up.index(1)] if any(up) else "never"
+    if any(up):
+        ts_index = up.index(1)
+        ts = t_log[ts_index]
+        ts_index = min(len(t_log)-2, ts_index+100)
+        actions = th_ddot[ts_index:]
+        vel = th_dot[ts_index:]
+        action_diffs = np.diff(actions)
+        action_rms_diff = np.sqrt(np.mean(action_diffs**2))
+        action_signs = np.sign(actions)
+        action_zc = np.sum(np.diff(action_signs) != 0) # zero_crossings
+        vel_var = np.var(vel)
+    else:
+        ts = "never"
+        action_rms_diff = np.inf
+        action_zc = np.inf # zero_crossings
+        vel_var = np.inf
     print(f'''
+    Summary:
             1. reward:          {sum(rew)}
             2. t_log(s):         {t_log[-1]}
             3. t_swing_up(s):   {ts}
             4. up_t_log(%):      {sum(up)/len(up)*100}%
+    Smoothness:
+            1. ActionDiff RMS:    {action_rms_diff}
+            2. Action ZeroCr.:    {action_zc}
+            3. ArmVelocity Var:    {vel_var}
             ''')
 
     # v) plots 
