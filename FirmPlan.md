@@ -7,6 +7,8 @@ from an acceleration action, θ from step counting, α from the AS5600).
 ## Working style
 - Small steps. Claude explains and guides, the user writes the code, Claude reviews.
 - Every step ends with a test on the hardware. Don't move on until it runs and is understood.
+- Exception for now (2026-11-05): the hardware tests are deferred, so code can be written ahead of
+  them. A step's box stays unticked until its hardware test passes.
 
 ## Hardware / wiring
 | Signal | Pin | Notes |
@@ -17,8 +19,8 @@ from an acceleration action, θ from step counting, α from the AS5600).
 | MS1, MS2 | VIO | 1/16 microstepping → **3200 µsteps/rev**, 0.1125° per µstep |
 | PDN_UART | not connected | standalone mode, no UART. Hold current drops after standstill (check later) |
 | SPREAD | (module default) | currently StealthChop. Low = StealthChop, high (VIO) = SpreadCycle. If the module exposes the pin, wire it to a GPIO to switch in firmware without UART (only at standstill) |
-| AS5600 SDA | GPIO 4 (pin 6), proposed | I2C0, address 0x36, 400 kHz |
-| AS5600 SCL | GPIO 5 (pin 7), proposed | I2C0 |
+| AS5600 SDA | GPIO 4 (pin 6) | I2C0, address 0x36, 100 kHz |
+| AS5600 SCL | GPIO 5 (pin 7) | I2C0 |
 | AS5600 DIR | VCC | fixed direction, sign handled in software |
 | AS5600 VCC | 3V3(OUT) (pin 36) | check the module's 3.3 V jumper. 100 nF to GND at the sensor if the module has none |
 
@@ -33,18 +35,37 @@ from an acceleration action, θ from step counting, α from the AS5600).
     new speed to PIO.
   - Core 1 handles anything that can block (USB telemetry/logging, commands from the PC).
   - The sensor is **not** read on a separate core: the loop needs the fresh value, the I2C read is
-    only ~1–3 % of the 10 ms budget, and a split would need locking.
+    only ~5 % of the 10 ms budget, and a split would need locking.
 - **Control rate**: 100 Hz (dt = 10 ms), same as the sim.
-- **PIO stepper clock**: 1 cycle = 1 µs (clkdiv = 150.0).
-  - STEP high time is 1 cycle = 1 µs, well above the TMC2209 minimum (~100 ns), so no `[delay]`.
-  - Trade-off: at 20 rad/s a period is ≈ 98 cycles, so the speed resolution there is ≈ 1 %.
-    Accepted for now. If it matters, go to 100 ns cycles **and** add `[1]` to `set pins, 1`.
+- **I2C speed**: 100 kHz, the slowest standard speed, because it fits the timing and gives the most
+  margin on thin, moving wires near a stepper. A failed read (old angle held, or motor stopped)
+  costs far more than a slightly slower read.
+  - One angle read is about 48 bit times:
+    | Speed | Read time | Share of the 10 ms loop |
+    |---|---|---|
+    | 100 kHz | ~480 µs | ~5 % |
+    | 400 kHz | ~120 µs | ~1.2 % |
+  - **What 400 kHz would give** (saves about 360 µs per read):
+    - more spare time in the loop;
+    - a slightly fresher angle, since the motor command goes out sooner after the reading. This is
+      small next to the 10 ms loop and the AS5600's default filter lag of about 2.2 ms.
+  - **Reconsider only if:**
+    - the worst-case loop time measured in step 6 gets close to 10 ms; or
+    - lag turns out to limit the balance, and the `CONF` filter (5d) has already been reduced.
+  - **What 400 kHz would cost:** less signal margin. The I2C rise-time limit is 300 ns at 400 kHz
+    and 1000 ns at 100 kHz. Rise time ≈ 0.85·R·C, so 4.7 kΩ with a guessed 100 pF of cable and pin
+    capacitance gives about 400 ns: fine at 100 kHz, marginal at 400 kHz. It could need stronger
+    pull-ups. If the speed is raised, rerun the error test from 5c.
+- **PIO stepper clock**: 1 cycle = 100 ns (`PIO_FREQ` = 10 MHz, clkdiv = 15 at the default clock).
+  - STEP high time is 2 cycles = 200 ns (`set pins, 1 [1]`), above the TMC2209 minimum (~100 ns).
+  - At 20 rad/s a period is ≈ 982 cycles, so the speed resolution there is ≈ 0.1 %.
 - **Command word** (CPU → PIO TX FIFO):
   - bit 0 = DIR, bits 1..31 = delay N.
   - N = 0 means stop: the SM polls the FIFO in a 5-cycle loop and makes no steps.
-- **Period** = N + 8 cycles (7 instructions + `jmp y--` loop runs N + 1 times).
-  - Steps/s = 3200·|v| / 2π, so period P = π·10⁴ / (16·|v|) cycles at 1 µs/cycle.
-  - N = round(P) − 8.
+- **Period** = N + 9 cycles (8 cycles of instructions, including the `[1]` delay, + `jmp y--` loop
+  runs N + 1 times).
+  - Steps/s = 3200·|v| / 2π, so period P = 2π·`PIO_FREQ` / (3200·|v|) ≈ 19635/|v| cycles.
+  - N = round(P) − 9.
 - **Speed limits**: clamp |v| to `max_speed` = 20 rad/s before converting, so a moving command
   always gives N ≥ 1 and never collides with the stop code 0.
 - **FIFO handling**: before each write the CPU calls `pio_sm_clear_fifos()`, then `pio_sm_put()`
@@ -66,14 +87,14 @@ from an acceleration action, θ from step counting, α from the AS5600).
 ## Files to build (in order)
 1. **`firmware/stepper_motor/CMakeLists.txt`**: clean up the generated template (done).
    - Project and target are named `main` → the build output is `build/main.uf2`.
-   - `add_executable(main main.c stepper.c)`.
+   - `add_executable(main main.c stepper.c)`. A second target, `encoder_test`, is added in step 5.
    - One `pico_generate_pio_header` line each for `move.pio` and `read.pio`.
    - stdio over USB (`pico_enable_stdio_usb(main 1)`), UART stdio off.
    - Linked: `pico_stdlib`, `hardware_pio`, `hardware_i2c` (AS5600), `pico_multicore` (core 1).
    - The first `main.c` was a "Hello, world!" loop that verified the build, pioasm, flashing and
      the USB serial.
 2. **`firmware/stepper_motor/move.pio`** (was `stepper.pio`): step generator (done).
-   - Comment the cycle count (period = N + 8).
+   - Comment the cycle count (period = N + 9).
    - `clkdiv` parameter as `float`.
    - In the init helper (the `% c-sdk` block, plain C), drive STEP and DIR low with
      `pio_sm_set_pins_with_mask` **before** `pio_sm_set_consecutive_pindirs`. Once
@@ -83,17 +104,19 @@ from an acceleration action, θ from step counting, α from the AS5600).
 3. **`firmware/stepper_motor/main.c`**: motor test.
    - Remove the blink example; `stdio_init_all()`; load the program; claim an SM
      (`pio_claim_unused_sm`); init with STEP = 14, DIR = 15.
-   - clkdiv = `clock_get_hz(clk_sys) / 1e6f` (= 150 at the default clock) instead of a hardcoded 150.
+   - clkdiv = `clock_get_hz(clk_sys) / PIO_FREQ` (= 15 at the default clock) instead of a hardcoded
+     value.
    - `stepper.c` / `stepper.h` hold the stepper functions and constants below.
    - `uint32_t speed_to_word(float v)` (v in rad/s, signed):
      - clamp |v|;
      - |v| below `VMIN` → stop word (N = 0);
-     - otherwise N = round(π·10⁴/(16·|v|)) − 8, word = (N << 1) | dir.
-   - `set_speed(float v)`: `pio_sm_clear_fifos` + `pio_sm_put`.
+     - otherwise N = round(2π·`PIO_FREQ`/(3200·|v|)) − 9, word = (N << 1) | dir.
+   - `set_speed(float v, PIO pio, uint sm)`: `pio_sm_clear_fifos` + `pio_sm_put`.
    - Fixed 10 ms tick with absolute deadlines (`delayed_by_us` + `sleep_until`), not `sleep_ms(10)`,
      which drifts by the loop's own run time. Same pattern as the control loop later.
    - **Run on the bare motor** (arm and encoder wires off). One ramp up + down at 2π rad/s is
      already π rad of travel, more than the ±120° arm range.
+   - `main.c` currently holds the limits test below, not this basic profile.
    - Test profile, updated every 10 ms:
      - integrate a constant acceleration into v (same as the sim);
      - ramp 0 → 2π rad/s (1 rev/s) in 0.5 s, hold 2 s, ramp down to 0;
@@ -114,7 +137,7 @@ from an acceleration action, θ from step counting, α from the AS5600).
    - Loop:
      - `wait 1 pin 0` (STEP rising);
      - `jmp pin` on DIR to choose up/down;
-     - down: `jmp x--` to the next instruction;
+     - down: `jmp x-- done`, then `jmp done` (both paths continue at `done`);
      - up: `mov x, ~x` → `jmp x--` → `mov x, ~x` (increment trick);
      - `wait 0 pin 0` (STEP falling);
      - `mov isr, x` then `mov rxfifo[0], isr` (publish the count).
@@ -124,8 +147,8 @@ from an acceleration action, θ from step counting, α from the AS5600).
      `.fifo txput` after `.program`. pioasm rejects the instruction without `.fifo txput`, which
      also sets the FIFO join in the default config. The CPU then reads the latest count any time
      with `(int32_t)pio->rxf_putget[sm][0]`. No FIFO draining and never stale.
-   - Run it at full speed (clkdiv = 1). DIR is set 3 cycles before the STEP edge by the stepper
-     SM, so it is stable when sampled.
+   - Run it at full speed (clkdiv = 1). DIR is set 3 stepper SM cycles (300 ns) before the STEP
+     edge, so it is stable when sampled.
    - Init:
      - no `pio_sm_set_consecutive_pindirs` here, with either `true` or `false`. Pin directions are
        shared by all SMs in a PIO block, so `false` would turn STEP and DIR into inputs and cut
@@ -136,20 +159,30 @@ from an acceleration action, θ from step counting, α from the AS5600).
        restarting an SM doesn't clear X.
    - Sign must match the DIR convention: positive count = positive θ in the sim.
    - θ = count · 2π / 3200.
-   - **Hardware checks**: print the raw count during the motor test.
-     - Scale and sign: v = +2π rad/s for 1 s (ramps not counted) adds about 3195–3205 counts. Not
-       exactly 3200, because the 312.5-cycle period has to round to a whole number.
+   - **Hardware checks**: print the raw count during the motor test. `main.c` doesn't print it yet,
+     and its limits test has no 2π rad/s stage, so both need adding first.
+     - Scale and sign: v = +2π rad/s for 1 s (ramps not counted) adds about 3200 counts. At 10 MHz
+       that period is a whole 3125 cycles, so expect only a few counts of timing difference.
      - Return to zero: after each forward + backward cycle the count is near 0. A few steps per
        stage are normal, because the two moves aren't perfectly mirrored in time. It is a problem
        only if the offset keeps growing or disagrees with the shaft mark.
 5. **AS5600 read test**: pendulum angle α.
    - **Code layout**: a reusable driver plus a test program, both in `firmware/stepper_motor/`:
-     - `as5600.h` / `as5600.c`: the driver. The final control firmware reuses it unchanged.
+     - `encoder.h` / `encoder.c`: the driver and the raw → α conversion. The final control firmware
+       reuses them unchanged.
+     - No separate `pendulum.c`: the conversion is only about 20 lines. Move it out if it grows
+       (e.g. filtering).
      - `encoder_test.c`: the test program.
      - A second executable in the same `CMakeLists.txt`:
-       - `add_executable(encoder_test encoder_test.c as5600.c)`;
+       - `add_executable(encoder_test encoder_test.c encoder.c)` (added);
        - its own `target_link_libraries` (`pico_stdlib`, `hardware_i2c`);
-       - `pico_enable_stdio_usb(encoder_test 1)` and `pico_add_extra_outputs(encoder_test)`.
+       - `pico_enable_stdio_usb(encoder_test 1)`, `pico_enable_stdio_uart(encoder_test 0)` and
+         `pico_add_extra_outputs(encoder_test)`.
+     - Build only this target, so a problem in `main` can't block it, using the Pico extension's
+       ninja (not on the PATH), from `firmware/stepper_motor`:
+       `~/.pico-sdk/ninja/v1.13.2/ninja -C build encoder_test`. Ninja reruns CMake by itself when
+       `CMakeLists.txt` changes.
+     - The VS Code "Compile Project" task runs ninja with no target, so it builds both programs.
      - Flash by copying `build/encoder_test.uf2`. The motor test (`main`) stays intact.
    - **Wiring** (power off while wiring):
      - VCC → Pico 3V3(OUT), pin 36. Some modules need a jumper or bridge for 3.3 V operation
@@ -162,23 +195,42 @@ from an acceleration action, θ from step counting, α from the AS5600).
        module already has it (most do, which is why online projects don't show one).
      - GPO / OUT: leave unconnected.
      - Pull-ups: most modules have 4.7–10 kΩ on SDA/SCL. The Pico's internal ones (~50 kΩ) are
-       too weak for 400 kHz.
+       too weak to rely on, even at 100 kHz.
      - Magnet: diametrically magnetized, centered on the chip, 0.5–3 mm gap.
-   - **Step 5a: I2C scan.** Probe addresses 0x08–0x77 with a 1-byte `i2c_read_timeout_us` and
-     print the ones that ACK. Expected: only **0x36**. If nothing answers, the problem is wiring
-     or pull-ups, not the driver code.
-   - **Step 5b: driver API** (`as5600.h`):
-     - `void as5600_init(i2c_inst_t *i2c, uint sda, uint scl, uint baud)`:
+   - **Step 5a: I2C scan.** In `encoder_test.c`, using `as5600_init` from `encoder.c`:
+     - `stdio_init_all()`, then init I2C0 at **100 kHz** on `SDA_PIN` (4) and `CLK_PIN` (5). This is
+       the speed used from here on.
+     - `sleep_ms(2000)` at the top of the scan loop allows time to open the serial monitor and
+       repeats the scan every 2 s, so a wiggled wire shows up in the output.
+     - Probe addresses 0x08–0x77 with `i2c_read_timeout_us(i2c0, addr, &byte, 1, false, 1000)`.
+       A return value of 1 means something answered: print the address in hex.
+     - Count the `PICO_ERROR_TIMEOUT` returns in each scan.
+     - Print a line with that count when the scan ends, so an empty result doesn't look like a hang.
+     - The magnet isn't needed yet: the chip answers on I2C without one.
+     - **Bare Pico check (no sensor):** should print no addresses and 0 timeouts. This only tests
+       flashing, USB and the I2C setup.
+     - **Results:**
+       - only **0x36**: pass;
+       - nothing answers: wiring or pull-ups, not the code (SDA/SCL swapped, VCC, breadboard contact);
+       - calls returning `PICO_ERROR_TIMEOUT`: SDA or SCL is probably stuck low or shorted. A
+         missing device normally gives `PICO_ERROR_GENERIC` (no ACK) instead. The SDK's read still
+         has one wait with no timeout (TX FIFO space), so a hang on a stuck bus isn't ruled out.
+   - **Step 5b: driver API** (`encoder.h`):
+     - `void as5600_init(i2c_inst_t *i2c, uint baud, uint gpio_data, uint gpio_clock)` (written):
        - `i2c_init`;
        - `gpio_set_function(..., GPIO_FUNC_I2C)` on both pins;
-       - `gpio_pull_up` on both pins (backup only).
-     - `int as5600_read_reg8(uint8_t reg, uint8_t *val)` and
+       - `gpio_pull_up` on both pins (backup only);
+       - still to add: save `i2c` in a `static` variable in `encoder.c`, because the read functions
+         below don't take it as an argument.
+     - Not written yet: `int as5600_read_reg8(uint8_t reg, uint8_t *val)` and
        `int as5600_read_reg16(uint8_t reg, uint16_t *val)`:
        - write the register address with **nostop = true** (repeated start);
        - then read 1 or 2 bytes, high byte first.
      - `int as5600_read_raw(uint16_t *raw)`: register 0x0C/0x0D, masked to 12 bits (`& 0x0FFF`).
      - Return < 0 on error. Use the **`_timeout_us` I2C calls** (e.g. 1000 µs), not the
        `_blocking` ones: a loose encoder wire must never hang the control loop.
+     - The SDK's I2C calls return the number of bytes transferred. Check that it equals the length
+       requested: a partial transfer would pass a plain `< 0` check.
    - **Registers:**
      - `STATUS` 0x0B: bit 5 MD (magnet detected), bit 4 ML (too weak), bit 3 MH (too strong).
      - `RAW ANGLE` 0x0C/0x0D (12 bit, no output scaling).
@@ -186,7 +238,7 @@ from an acceleration action, θ from step counting, α from the AS5600).
      - `MAGNITUDE` 0x1B/0x1C.
      - `CONF` 0x07/0x08: filters and hysteresis, see 5d.
    - **Step 5c: `encoder_test.c`.**
-     - Start-up: init at 400 kHz, read STATUS and AGC once and print them. MD must be 1, ML and MH 0.
+     - Start-up: init at 100 kHz, read STATUS and AGC once and print them. MD must be 1, ML and MH 0.
      - Fixed 100 Hz tick (same `delayed_by_us` + `sleep_until` pattern as the motor test). Each tick:
        - read raw, timed with `time_us_32()`;
        - count errors;
@@ -194,18 +246,39 @@ from an acceleration action, θ from step counting, α from the AS5600).
      - **Checks** (turning the pendulum by hand):
        - the full 0–4095 range, with a clean wrap 4095 → 0;
        - the value is steady at rest (jitter of 1–2 counts is normal);
-       - read time ≈ 100 µs at 400 kHz;
-       - no errors while the arm and cable move.
-       - If there are errors with the long, thin encoder cable, try 100 kHz.
+       - read time ≈ 480 µs at 100 kHz.
+     - **Error test:** count failed reads for about 10 minutes (around 60,000 reads).
+       - Move the arm by hand through its full range, so the cable flexes.
+       - Repeat with the motor running, since stepper noise is the most likely thing to corrupt the
+         bus. If the arm is mounted, keep the motion within its range.
+       - Expected: 0 errors. If there are any at 100 kHz, the problem is the wiring, not the speed:
+         check the pull-ups, the cable routing and the distance from the motor wires.
    - **Step 5d: convert to α the way `env.py` does.**
+     - **Keep reading and converting separate:** `as5600_read_raw` talks to the sensor and can fail.
+       `alpha_update(alpha_t *a, uint16_t raw)` is only math and can't fail. This allows testing
+       with made-up values, and a failed read never reaches α or α̇.
+     - **Test values** (run on the Pico, since `encoder.c` includes Pico headers):
+       - `raw_up` = 1000: raw 1000 → α = 0; raw 3048 → α = −π;
+       - raw 4095 then 1 → α̇ = +0.307 rad/s; raw 1 then 4095 → α̇ = −0.307 rad/s;
+       - calibration samples 4095 and 1 → `raw_down` = 0, `raw_up` = 2048.
+     - **Not `_read_alpha`:** the sim goes true angle → counts → rad to fake an encoder. Here only
+       counts → rad is needed, plus the `raw_up` offset, because raw 0 is wherever the magnet
+       happened to end up.
      - **Calibration:** let the pendulum hang still and read `raw_down`. Upright is half a turn
-       away, so `raw_up = (raw_down + 2048) % 4096`.
-     - **Angle:** α = (raw − raw_up)·2π/4096, wrapped to (−π, π]. Hanging = ±π, upright = 0.
+       away, so `raw_up = (raw_down + 2048) % 4096`. To average several samples, average the signed
+       differences from the first one, not the raw values: near the wrap, 4095 and 1 would average
+       to about 2048, half a turn off.
+     - **Angle:** α = (raw − raw_up)·2π/4096, wrapped to [−π, π). Hanging = ±π, upright = 0.
+       - Wrap in integer counts and convert to radians last, using a signed type (`uint32_t`
+         subtraction underflows).
+       - `env.py` uses [0, 2π). The two are equivalent, because the observations only use sin, cos
+         and the wrapped difference.
      - **Sign:** in `model.xml` the `bearing` axis points along the arm, outward from the motor.
        So positive α = counter-clockwise **seen from the arm tip looking toward the motor shaft**.
        Confirm in the sim viewer, then flip the sign in software if the chip counts the other way.
      - **α̇:** wrap(α − α_prev)/dt, same as `env.py`. Expected resolution: one count per 10 ms
-       = 0.15 rad/s.
+       = 0.15 rad/s. Initialize the previous value from a real read so the first α̇ is 0, as
+       `reset()` does.
      - Print α, α̇ and sin/cos α. Swing the pendulum by hand: α̇ should be smooth and change sign
        at the turning points.
      - **`CONF` filters (later, before balancing):**
@@ -219,11 +292,24 @@ from an acceleration action, θ from step counting, α from the AS5600).
    - Core 0: fixed 10 ms tick using absolute deadlines (`sleep_until` or a repeating timer). Each
      tick: read α, read step count → θ, compute α̇ (wrap-around), θ̇ = commanded v, then the
      controller.
+   - **What comes from `env.py`:** Python doesn't run on the Pico, so these are rewritten in C.
+     MuJoCo, `_reward`, `reset` and training stay on the PC.
+     - `_read_alpha` → the conversion from 5d.
+     - `_get_obs` → the observation vector. Same order and scaling as training:
+       `[sin α, cos α, θ / (π/2), α̇ / 20, v / max_speed]`.
+     - `step` → `v += accel·dt`, clamp to `max_speed`, then `set_speed(v)`.
+     - `terminated` → a safety stop for the motor.
+   - **Failed AS5600 reads:**
+     - hold the last α and α̇;
+     - count consecutive failures and stop the motor after a few (limit: see Open questions);
+     - after recovery, reset the previous value, or α̇ spikes because the change spans more than
+       one `dt`.
    - Core 1 (`pico_multicore`): telemetry over USB, fed from core 0 via the inter-core FIFO or a
      small ring buffer. Core 0 never blocks on printf.
    - Measure loop timing jitter and the worst-case loop time.
    - Measure the low-speed lag: log commanded v and the step count around zero crossings.
-   - Arm safety: stop the motor if |θ| exceeds the ±120° range.
+   - Arm safety: stop the motor if |θ| exceeds the ±120° range. The sim ends an episode earlier, at
+     ±90° (`th_limit`), see Open questions.
 7. **First controllers on hardware**:
    - Free-swing test (compare period and decay with the sim, `SimPlan.md`).
    - Classic balance (LQR) near upright.
@@ -247,12 +333,17 @@ from an acceleration action, θ from step counting, α from the AS5600).
 
 ## Open questions
 - Is SPREAD accessible on the module (GPIO-switchable chopper mode), or switch via UART later?
-- Is the ~1 % speed resolution at high speed acceptable (decide after the motor test)?
 - What should VMIN be? Decide in step 6, before balancing. Compare 0.01 and about 0.2 rad/s: add the
   lag and dead band to `env.py`, or measure on the hardware. If neither value works, look at cutting
   the wait short from C (`pio_sm_exec` a `jmp`). Not designed yet.
 - Standstill current reduction (PDN_UART) vs. holding torque: does the arm hold well enough when
   the stepper is briefly stopped?
+- How many consecutive failed AS5600 reads before the motor stops? Decide in step 6, using the error
+  rate measured in 5c.
+- Should the firmware's safety stop be at ±120° (mechanical range) or ±90° (where sim episodes end)?
+  The policy never trained past ±90°. Decide in step 6.
+- Add a hardware watchdog in step 6? PIO keeps stepping on its own, so if the CPU hangs, the motor
+  keeps running at its last speed.
 
 ## Status
 - [x] Pico SDK toolchain installed, LED test (MicroPython, discarded)
@@ -262,7 +353,8 @@ from an acceleration action, θ from step counting, α from the AS5600).
 - [x] Hardware check: flash `main.uf2`, "Hello, world!" on the USB serial port
 - [x] `stepper.pio` renamed to `move.pio`, stepper functions moved to `stepper.c/.h`
 - [x] `move.pio` review fixes (overhead comment, float clkdiv, pins low)
-- [ ] `main.c`: clkdiv from `clock_get_hz(clk_sys) / PIO_FREQ` instead of the hardcoded 150
+- [x] `main.c`: clkdiv from `clock_get_hz(clk_sys) / PIO_FREQ` instead of a hardcoded value
+- [x] PIO clock raised to 10 MHz, period N + 9 (`move.pio`, `stepper.c/.h`)
 - [x] `main.c` motor test (ramp, hold, reverse) on the bare motor: runs both ways (2026-11-01).
   Two failures on the way were breadboard wiring/contacts, not firmware.
 - [x] Motor test: returns to start mark (limits test, all stages)
@@ -272,11 +364,13 @@ from an acceleration action, θ from step counting, α from the AS5600).
   a = 400 rad/s² at 10 rad/s and the sim's 200 rad/s² at 20 rad/s. Slight buzz at higher speed
   (StealthChop), no stalls. The sim limits are OK for the bare motor.
 - [ ] Limits test again with the arm mounted (within ±120°); optional margin test (VMAX 30)
-- [ ] `read.pio` + `steps2rad`: written, in review (not building yet, 2026-11-04)
-- [ ] Step counter hardware check (scale, sign, return to zero)
+- [x] `read.pio` + `steps2rad`: written, builds (2026-11-05), not tested on hardware
+- [ ] Step counter hardware check (scale, sign, return to zero). `main.c` must print the count first
 - [ ] Choose VMIN (see Open questions)
-- [ ] AS5600 5a: wiring + I2C scan (0x36 answers)
-- [ ] AS5600 5b: driver `as5600.c/.h`
+- [x] `encoder_test` target in `CMakeLists.txt`
+- [ ] AS5600 5a: scan code written and builds (2026-11-05). Still to do: wiring + I2C scan (0x36
+  answers)
+- [ ] AS5600 5b: driver `encoder.c/.h`: `as5600_init` written, read functions not yet
 - [ ] AS5600 5c: `encoder_test.c` raw reads at 100 Hz, STATUS/AGC ok, read time, no errors
 - [ ] AS5600 5d: calibration, α and α̇ like `env.py`, sign vs. sim; CONF filter choice
 - [ ] Solder the circuit on perfboard (after the AS5600 and SPREAD wiring are settled, see below)
