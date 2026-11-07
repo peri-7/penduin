@@ -72,3 +72,14 @@ pico_enable_stdio_usb(encoder_test 1)
 pico_enable_stdio_uart(encoder_test 0)
 
 pico_add_extra_outputs(encoder_test)
+
+add_executable(motor_test motor_test.c stepper.c)
+
+pico_generate_pio_header(motor_test ${CMAKE_CURRENT_LIST_DIR}/move.pio)
+pico_generate_pio_header(motor_test ${CMAKE_CURRENT_LIST_DIR}/read.pio)
+
+target_link_libraries(motor_test pico_stdlib hardware_pio)
+pico_enable_stdio_usb(motor_test 1)
+pico_enable_stdio_uart(motor_test 0)
+
+pico_add_extra_outputs(motor_test)

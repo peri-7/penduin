@@ -4,6 +4,9 @@
 .program read
 .fifo txput
 
+	mov isr, x          ; send 0 to fifo 
+	mov rxfifo[0], isr
+
 .wrap_target
 
 	wait 1 pin 0  		; a step was made

@@ -1,14 +1,35 @@
 #include "stepper.h"
 #include <math.h>
+#include <hardware/clocks.h>
+#include "move.pio.h"
+#include "read.pio.h"
 
 #define PI 3.14159265f
 
+#define STEP_PIN 14
+#define DIR_PIN 15
+
 #define MICROSTEP 16
 #define STEPS_REV (200*MICROSTEP)
-#define VMAX 20.0f
-#define VMIN 0.01f      // below this the motor stops (dead band); also absorbs float round-off 
-// low VMIN -> high speed resolution / low time resolution 
+#define VMIN 0.01f      // below this the motor stops (dead band); also absorbs float round-off
+// low VMIN -> high speed resolution / low time resolution
 #define PIO_OVERHEAD 9      // cycles per period outside the wait loop: period = N + 9
+
+
+void init_move_pio(PIO *pio, uint *state_machine_id){
+    *pio = pio0;
+    *state_machine_id = pio_claim_unused_sm(pio0, true);
+    uint offset = pio_add_program(*pio, &move_program);
+    float factor = clock_get_hz(clk_sys) / PIO_FREQ;
+    move_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, factor);
+}
+
+void init_read_pio(PIO *pio, uint *state_machine_id){
+    *pio = pio0;
+    *state_machine_id = pio_claim_unused_sm(pio0, true);
+    uint offset = pio_add_program(*pio, &read_program);
+    read_program_init(*pio, *state_machine_id, offset, DIR_PIN, STEP_PIN, 1.0f);
+}
 
 
 uint32_t speed_to_word(float v){

@@ -5,6 +5,11 @@
 #include <hardware/pio.h>
 
 #define PIO_FREQ 10000000.0f // SM cycles per second: 150 MHz / clkdiv 15
+#define VMAX 20.0f
+
+void init_move_pio(PIO *pio, uint *state_machine_id);
+
+void init_read_pio(PIO *pio, uint *state_machine_id);
 
 uint32_t speed_to_word(float v);
 
