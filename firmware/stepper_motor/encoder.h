@@ -34,6 +34,8 @@ int read_reg(i2c_inst_t *i2c, uint8_t *reg, int len, uint8_t *buf);
 // Writes one byte. Returns 2 (register + value) on success. Refuses the BURN register.
 int write_reg(i2c_inst_t *i2c, uint8_t reg, uint8_t value);
 
+int set_SF(i2c_inst_t *i2c, int factor);
+
 int read_raw_angle(i2c_inst_t *i2c, uint16_t *angle);
 
 float raw2deg(uint16_t angle);

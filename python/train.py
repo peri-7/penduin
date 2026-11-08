@@ -14,7 +14,7 @@ if __name__ == "__main__":
     check_freq = 25_000 
     seed = 1
     version = 1
-    mode = "quad"
+    mode = "exp"
     name = f"sac_{mode}_{version}_seed{seed}"
     
     # paths
@@ -33,7 +33,12 @@ if __name__ == "__main__":
 
     # new training
     agent = SAC("MlpPolicy", env, seed=1, verbose=1, tensorboard_log=runs)
-    print("> Training starts!")
+    print(f'''
+    > Training starts!
+                > reward: {mode}
+                > version: {version}
+                > seed: {seed}
+        ''')
     check = CheckpointCallback(save_freq=check_freq, save_path=checks, name_prefix=name)
     agent.learn(total_timesteps=total_steps, callback=check, tb_log_name=name)
     ''' # extend training

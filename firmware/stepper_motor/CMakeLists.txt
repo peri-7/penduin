@@ -86,3 +86,11 @@ pico_enable_stdio_usb(motor_test 1)
 pico_enable_stdio_uart(motor_test 0)
 
 pico_add_extra_outputs(motor_test)
+
+add_executable(swing_log swing_log.c encoder.c)
+
+target_link_libraries(swing_log pico_stdlib hardware_i2c)
+pico_enable_stdio_usb(swing_log 1)
+pico_enable_stdio_uart(swing_log 0)
+
+pico_add_extra_outputs(swing_log)

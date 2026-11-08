@@ -57,6 +57,35 @@ int wrap_counts(int d){
     return d;
 }
 
+int set_SF(i2c_inst_t *i2c, int factor){
+    // choose filter
+    uint8_t sf = 0;
+    switch (factor){
+        case 16: sf = 0; break;
+        case 8: sf = 1; break;
+        case 4: sf = 2; break;
+        case 2: sf = 3; break;
+        default: return -1; // -1: no valid choice
+    }
+    // read-modify-write CONF
+    uint8_t reg = CONF_REG;
+    uint8_t buf[2];
+    int len = 2;
+    int err = read_reg(i2c, &reg, len, buf);
+    if (err != 2) return -2; // -2: couldnt read
+    uint8_t prev = buf[0];
+    uint8_t next = (prev&(0b11111100)) | sf;
+    err = write_reg(i2c, reg, next);
+    if (err != 2) return -3; // -3: couldnt write
+    // check CONF
+    err = read_reg(i2c, &reg, len, buf);
+    if (err != 2) return -2;
+    prev = buf[0];
+    if (prev != next) return -4; // -4: didnt write correctly
+    
+    return 0;  
+}
+
 // Averages the signed differences from the first reading, not the raw values: near the wrap,
 // 4095 and 1 would otherwise average to about 2048, half a turn off.
 uint16_t raw_average(const uint16_t *raw, int n){
