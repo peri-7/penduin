@@ -6,8 +6,11 @@
 
 #define PI 3.14159265f
 
-#define STEP_PIN 14
-#define DIR_PIN 15
+#define STEP_PIN 5
+#define DIR_PIN 4
+#define MS1 9
+#define MS2 8
+
 
 #define MICROSTEP 16
 #define STEPS_REV (200*MICROSTEP)
@@ -16,7 +19,19 @@
 #define PIO_OVERHEAD 9      // cycles per period outside the wait loop: period = N + 9
 
 
+void set_MS(){
+    gpio_init(MS1);
+    gpio_init(MS2);
+    gpio_set_dir(MS1, 1);
+    gpio_set_dir(MS2, 1);
+    gpio_put(MS1, true);
+    gpio_put(MS2, true);
+}
+
+
 void init_move_pio(PIO *pio, uint *state_machine_id){
+    set_MS();
+
     *pio = pio0;
     *state_machine_id = pio_claim_unused_sm(pio0, true);
     uint offset = pio_add_program(*pio, &move_program);

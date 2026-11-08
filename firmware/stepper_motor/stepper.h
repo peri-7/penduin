@@ -2,10 +2,13 @@
 #define STEPPER_H_
 
 #include <stdint.h>
+#include <pico/stdlib.h>
 #include <hardware/pio.h>
 
 #define PIO_FREQ 10000000.0f // SM cycles per second: 150 MHz / clkdiv 15
 #define VMAX 20.0f
+
+void set_MS();
 
 void init_move_pio(PIO *pio, uint *state_machine_id);
 

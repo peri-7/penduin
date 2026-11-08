@@ -229,6 +229,5 @@ int main()
         if(key == 'c') test_counter();
         else if(key == 'l') test_limits();
         else if(key == 's') test_low_speed();
-        else printf("unknown choice\n");
-    }
+        else printf("unknown choice\n");    }
 }
