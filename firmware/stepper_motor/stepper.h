@@ -20,6 +20,6 @@ void set_speed(float v, PIO pio, uint sm);
 
 int32_t read_steps(PIO pio, uint sm);
 
-float steps2rad(PIO pio, uint sm);
+float steps2rad(PIO pio, uint sm, int32_t steps0);
 
 #endif 

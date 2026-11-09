@@ -18,6 +18,7 @@ class PenduinEnv(gym.Env):
         self.dt = self.frame_skip * self.model.opt.timestep
         self.max_accel = 200
         self.max_speed = self.model.actuator_ctrlrange[0, 1]
+        self.min_speed = 0.1
         self.th_limit = np.pi/2
         self.a_dot_denom = 20
         self.mode = mode
@@ -106,6 +107,8 @@ class PenduinEnv(gym.Env):
         accel = self.max_accel * act
         self.speed = self.speed + accel*self.dt
         self.speed = np.clip(self.speed, a_min=-self.max_speed, a_max=self.max_speed)
+        if (abs(self.speed) < self.min_speed):
+            self.speed = 0
         # simulation
         self.data.ctrl[0] = self.speed
         mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)

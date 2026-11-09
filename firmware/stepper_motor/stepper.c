@@ -14,7 +14,7 @@
 
 #define MICROSTEP 16
 #define STEPS_REV (200*MICROSTEP)
-#define VMIN 0.01f      // below this the motor stops (dead band); also absorbs float round-off
+#define VMIN 0.1f      // below this the motor stops (dead band); also absorbs float round-off
 // low VMIN -> high speed resolution / low time resolution
 #define PIO_OVERHEAD 9      // cycles per period outside the wait loop: period = N + 9
 
@@ -69,8 +69,8 @@ int32_t read_steps(PIO pio, uint sm){
     return (int32_t)pio->rxf_putget[sm][0];
 }
 
-float steps2rad(PIO pio, uint sm){
-    float steps = (float)read_steps(pio, sm);
+float steps2rad(PIO pio, uint sm, int32_t steps0){
+    float steps = (float)(read_steps(pio, sm) - steps0);
     // 1 step = 1.8/16 deg = 2pi/3200 rad
     float rad = 2*PI*steps/STEPS_REV;
     return rad;

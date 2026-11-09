@@ -76,3 +76,16 @@ build and train everything in MuJoCo first, designed so it transfers to the hard
   (anti-spin), penalty on action *change* (anti-jitter), α̇ quantization noise (0.15 rad/s) as a jitter
   source, retrain from scratch after reward changes, longest-upright-streak metric in `eval.py`.
 - Next: `classic_control.py` (energy swing-up + LQR) and/or hardware bring-up (motor + encoder tests).
+
+## Before the next retraining (2026-11-09)
+All sim changes go into one retraining:
+- [x] Bearing friction from the free-swing fit (`python/sysid.py`, part A): `damping="0"`,
+  `frictionloss="0.000154"` in `model.xml`. The inertia stays at the OnShape value: the fit only
+  scaled it by 0.987, and the mass checks out on a scale (0.023 kg).
+- [ ] VMIN dead band in `step()`: send 0 to the motor while |speed| < 0.1 rad/s, as the firmware
+  does. Keep integrating `self.speed`, because the firmware's v keeps integrating too.
+- [ ] Lower limits: the motor skipped once at a = 200 rad/s² with v = 20 rad/s (`l`, stage 8), and the
+  SAC policies use 200 rad/s² together with 15 rad/s. First test the combination you want to train
+  with (`l` stage at that a and v). Keep `VMAX` in `stepper.h` equal to `max_speed`.
+- [ ] Delay and coupling from experiment B (`sysid.py`, part B), once the step 6 skeleton runs.
+- Safety stop on the hardware is ±90°, the same as `th_limit`.

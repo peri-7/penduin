@@ -8,3 +8,4 @@ numpy==2.4.6
 matplotlib==3.11.2          # plots in python/eval.py
 numpy-stl==4.1.1            # reading the STL meshes (inspecting parts)
 pyserial==3.5               # logging the Pico's USB serial output (python/log_serial.py)
+scipy==1.17.1               # least-squares fit in python/sysid.py

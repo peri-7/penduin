@@ -32,10 +32,10 @@ This session took the hardware from the breadboard to a soldered circuit, with e
 ## Hardware / wiring
 | Signal | Pin | Notes |
 |---|---|---|
-| STEP | GPIO 9 (pin 12) | driven by PIO (`move.pio`). Was GPIO 14 on the breadboard |
-| DIR | GPIO 8 (pin 11) | driven by the same PIO state machine (bit 0 of each word). Was GPIO 15. Right next to STEP, see step 4 |
+| STEP | GPIO 5 (pin 7) | driven by PIO (`move.pio`). Was GPIO 14 on the breadboard |
+| DIR | GPIO 4 (pin 6) | driven by the same PIO state machine (bit 0 of each word). Was GPIO 15. Right next to STEP, see step 4 |
 | EN | GND | active **low**: driver always enabled |
-| MS1, MS2 | GPIO 4 (pin 6), GPIO 5 (pin 7) | driven high by `set_MS()` (called from `init_move_pio`): 1/16 microstepping → **3200 µsteps/rev**, 0.1125° per µstep. Were tied to VIO on the breadboard. Until the Pico sets them they are low (1/8); the ±45° check with `n` passed (2026-11-08) |
+| MS1, MS2 | GPIO 9 (pin 12), GPIO 8 (pin 11) | driven high by `set_MS()` (called from `init_move_pio`): 1/16 microstepping → **3200 µsteps/rev**, 0.1125° per µstep. Were tied to VIO on the breadboard. Until the Pico sets them they are low (1/8); the ±45° check with `n` passed (2026-11-08) |
 | PDN_UART | not connected | standalone mode, no UART. Hold current drops after standstill (check later) |
 | SPREAD | (module default) | currently StealthChop. Low = StealthChop, high (VIO) = SpreadCycle. If the module exposes the pin, wire it to a GPIO to switch in firmware without UART (only at standstill) |
 | AS5600 SDA | GPIO 16 (pin 21) | I2C0, address 0x36, 100 kHz. Moved from GPIO 4. Now well away from STEP/DIR |
@@ -107,7 +107,7 @@ This session took the hardware from the breadboard to a soldered circuit, with e
   - Position error from that lag is up to about Δv/|v| µsteps (Δv = change in commanded speed). It
     is < 1 µstep only while Δv < |v|. Example: 0.1 → 2 rad/s can fall 20 µsteps behind. The step
     count stays correct, but θ̇ = commanded v is wrong during the wait.
-- **VMIN is a trade-off** (0.01 rad/s for now, see Open questions):
+- **VMIN is a trade-off** (0.1 rad/s since 2026-11-09: the longest wait is 19.6 ms, about 2 ticks):
   - low VMIN: smaller dead band, but the longest uninterruptible wait gets longer;
   - high VMIN: lag stays short, but slow commands give no motion. At 0.2 rad/s the lag is at most
     about one tick, and below that speed the motor moves < 1 µstep per tick.
@@ -143,7 +143,7 @@ This session took the hardware from the breadboard to a soldered circuit, with e
    - `stepper.c` / `stepper.h` hold the stepper functions and constants below.
      - `stepper.h`: `PIO_FREQ` and `VMAX` (20). `VMAX` must match `max_speed`, which `env.py` takes
        from `ctrlrange` in `model.xml`. The observation scaling in step 6 needs this value too.
-     - `stepper.c` only: `STEP_PIN`, `DIR_PIN`, `MS1`, `MS2` (with `set_MS()`), `VMIN` (0.01),
+     - `stepper.c` only: `STEP_PIN`, `DIR_PIN`, `MS1`, `MS2` (with `set_MS()`), `VMIN` (0.1),
        `STEPS_REV` (3200), `PIO_OVERHEAD` (9).
    - `uint32_t speed_to_word(float v)` (v in rad/s, signed):
      - dir = 0 if v < 0, otherwise 1, then continue with |v|;
@@ -232,8 +232,8 @@ This session took the hardware from the breadboard to a soldered circuit, with e
    - Sign must match the DIR convention: positive count = positive θ in the sim. In the code,
      DIR = 1 counts up and v > 0 gives DIR = 1. The hardware check below still has to confirm it.
    - θ = count · 2π / 3200.
-   - C side, in `stepper.c`: `read_steps(pio, sm)` returns the raw count and `steps2rad(pio, sm)`
-     returns θ. `motor_test.c` uses `read_steps`; `steps2rad` isn't called yet.
+   - C side, in `stepper.c`: `read_steps(pio, sm)` returns the raw count and
+     `steps2rad(pio, sm, steps0)` returns θ relative to the count `steps0`. `motor_test.c` uses `read_steps`; `steps2rad` isn't called yet.
    - **Hardware checks**: option `c` in `motor_test.c`: 10 cycles of forward + backward at `VMAX`.
      - The counter only reads the pins PIO drives, so it counts commanded steps, not motion. It can't
        see skipped motor steps, so the shaft mark is the only independent check.
@@ -581,15 +581,17 @@ This session took the hardware from the breadboard to a soldered circuit, with e
 - The +1 count per cycle in `m` after soldering: probably the test's print timing, not the
   hardware (step 4). Optional check: print after the command and rerun `m`.
 - Is SPREAD accessible on the module (GPIO-switchable chopper mode), or switch via UART later?
-- What should VMIN be? Decide in step 6, before balancing. Compare 0.01 and about 0.2 rad/s: add the
-  lag and dead band to `env.py`, or measure on the hardware. If neither value works, look at cutting
-  the wait short from C (`pio_sm_exec` a `jmp`). Not designed yet.
+- ~~What should VMIN be?~~ **Decided (2026-11-09): 0.1 rad/s.** At 0.01 the longest uninterruptible
+  wait was 196 ms; at 0.1 it is 19.6 ms (about 2 ticks). Still to do: add the dead band to `env.py`
+  before retraining. If the lag still hurts, look at cutting the wait short from C (`pio_sm_exec` a
+  `jmp`). Not designed yet.
 - Standstill current reduction (PDN_UART) vs. holding torque: does the arm hold well enough when
   the stepper is briefly stopped?
-- How many consecutive failed AS5600 reads before the motor stops? Decide in step 6, using the error
-  rate measured in 5c: 0/60000 without the motor, 0/29250 with `m` after soldering.
-- Should the firmware's safety stop be at ±120° (mechanical range) or ±90° (where sim episodes end)?
-  The policy never trained past ±90°. Decide in step 6.
+- ~~How many consecutive failed AS5600 reads before the motor stops?~~ **Decided (2026-11-09): 3**
+  (30 ms), counted in the RUN state. Error rate measured in 5c: 0/60000 without the motor, 0/29250
+  with `m` after soldering.
+- ~~Safety stop at ±120° or ±90°?~~ **Decided (2026-11-09): ±90°**, the same as `th_limit` in the sim,
+  where episodes end.
 - Add a hardware watchdog in step 6? PIO keeps stepping on its own, so if the CPU hangs, the motor
   keeps running at its last speed.
 
@@ -627,13 +629,14 @@ This session took the hardware from the breadboard to a soldered circuit, with e
   count added (2026-11-06). `steps2rad` isn't called yet
 - [x] Step counter hardware check (2026-11-06): passed at 20 rad/s with the arm on, details in step 4
 - [x] `motor_test.c`: menu, `c`, `l` (with the key wait) and `s` ran on hardware (2026-11-08)
-- [x] Pin move after soldering: STEP 9, DIR 8, MS1/MS2 on GPIO 4/5 via `set_MS()`. 1/16 check with
+- [x] Pin move after soldering: STEP 5, DIR 4, MS1/MS2 on GPIO 9/8 via `set_MS()`. 1/16 check with
   `n` (±45°) and direction check passed (2026-11-08)
-- [ ] **To-do:** fix the arm hub play (slipped almost a full turn during `m`, 2026-11-08), then rerun
-  `l` with the arm on
+- [x] Arm hub play fixed, then `l` rerun with the arm on: one skip, only at stage 8 (a = 200,
+  v = 20, the sim's limits). The trained SAC policies reach 200 rad/s² and 15 rad/s at the same time,
+  so the env limits get lowered before retraining (see `SimPlan.md`)
 - [x] +1 count per cycle in `m` after soldering: `c` rerun clean (−1/0, no climb), so the counter is
   fine. Most likely `m`'s print timing (step 4). Optional: print after the command and rerun `m`
-- [ ] Choose VMIN (see Open questions)
+- [x] Choose VMIN: 0.1 rad/s (2026-11-09). Still to add to `env.py`
 - [x] `encoder_test` target in `CMakeLists.txt`
 - [x] AS5600 5a: wired on GPIO 16/17, the scan finds only 0x36 with 0 timeouts (2026-11-06)
 - [x] AS5600 5b: driver `encoder.c/.h`: `as5600_init`, `read_reg` and `read_raw_angle` ran on

@@ -30,7 +30,7 @@
 
 				<!-- Link 3: pendulum -->
 				<body name="pendulum" pos="0.072 0 0.014" xyaxes="0 0 -1 0 1 0">
-					<joint name="bearing" type="hinge" axis="0 0 1" damping="0.0001"/>
+					<joint name="bearing" type="hinge" axis="0 0 1"  damping="0" frictionloss="0.000154"/>
 					<inertial pos="-0.074141 0 0.014052" mass="0.023" fullinertia="0.000001186 0.000014564 0.000015055 0 0.000000253 0"/>
 					<geom mesh="pendulum_mesh" xyaxes="0 0 1 0 1 0" rgba="0 0.4 1 1"/>
 					
