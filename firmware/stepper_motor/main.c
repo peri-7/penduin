@@ -9,7 +9,6 @@
 
 #include "stepper.h"
 #include "encoder.h"
-#include "excitation.h"
 
 #define DT_US 10000
 #define DT (DT_US * 1e-6f)
@@ -25,9 +24,8 @@ static float th, th_dot, th_ddot, action;
 static int32_t steps0;
 static const char *reason = "";
 
-static int cnt = 0, restart = 0, ticks = 0;
+static int cnt = 0, restart = 0;
 static uint16_t raw = 0;
-static uint16_t late = 0, dropped = 0;  // running totals over a RUN, sent with every record
 
 static queue_t write_q, read_q;
 
@@ -35,26 +33,13 @@ typedef enum STATES {
     WAIT, CALIBRATE, RUN, FAULT 
 } state_t;
 
-typedef struct {
-    uint32_t time_us;
-    int16_t raw;
-    int32_t steps;
-    float v;
-    float action;
-    float alpha;
-    float alpha_dot;
-    uint16_t loop_us;
-    uint16_t late;
-    uint16_t dropped;
-} record_t;
 
 
 static void core1_main(void){
-    record_t r;
     while(true){
-        while(queue_try_remove(&write_q, &r)) 
-            printf("%lu,%d,%ld,%.3f,%.3f,%.4f,%.3f,%u,%u,%u\n", 
-            r.time_us, r.raw, r.steps, r.v, r.action, r.alpha, r.alpha_dot, r.loop_us, r.late, r.dropped);
+        char msg; // placeholder in case we need it, perhaps the observation space
+        while(queue_try_remove(&write_q, &msg)) 
+            printf("%c", msg); 
         int c = getchar_timeout_us(0);
         if(c != PICO_ERROR_TIMEOUT) {
             char k = (char)c;
@@ -65,7 +50,7 @@ static void core1_main(void){
 }
 
 static float controller(float a, float a_dot, float th, float th_dot){
-    return 0.01; // placeholder for tests
+    return 0.0; // placeholder for tests
 }
 
 
@@ -107,10 +92,10 @@ int calibrate(){
 int main()
 {
     // init all hardware
-    record_t record; char key;
+    char key;
     // stdio_usb_init() must run on core 0 (it owns the default alarm pool), or it returns false and USB never enumerates
     stdio_init_all();
-    queue_init(&write_q, sizeof(record_t), 64); 
+    queue_init(&write_q, sizeof(char), 64); 
     queue_init(&read_q, sizeof(char), 64);
     multicore_launch_core1(core1_main);
     while(!stdio_usb_connected()) sleep_ms(100);
@@ -145,10 +130,10 @@ int main()
             int c = calibrate();
             if (c == 0) {
                 while(queue_try_remove(&read_q, &key)); // empty queue
-                cnt = 0; th_dot = 0; th_ddot = 0; ticks = 0;
+                cnt = 0; restart = 1; 
+                th_dot = 0; th_ddot = 0; 
                 steps0 = read_steps(pio, sm1);
-                restart = 1; late = 0; dropped = 0;
-                printf("time_us,raw,steps,v,action,alpha,alpha_dot,loop_us,late,dropped\n");
+                
                 watchdog_enable(50, true);
                 next = get_absolute_time();
                 st = RUN;
@@ -160,19 +145,16 @@ int main()
         if (st == RUN){
             next = delayed_by_us(next, DT_US);
             watchdog_update();
-            uint32_t t0 = time_us_32();     // start of this tick's work, for time_us and loop_us
             // stop RUN if key is pressed
             if(queue_try_remove(&read_q, &key)) {
-                if(key == 'w') while(1) ; // watchdog test
+                // if(key == 'w') while(1) ; // watchdog test
                 set_speed(0, pio, sm0);
                 st = WAIT;
                 continue;
             }
             // read angle 'alpha' and 'theta'
-            bool ok = read_raw_angle(i2c0, &raw) == 2;
-            if(!ok){
+            if(read_raw_angle(i2c0, &raw) != 2){
                 restart = 1;
-                // printf("state: run -> read failed during run\n");
                 if(++cnt >= FAILED_CNTS){
                     reason = "read failures";
                     st = FAULT;
@@ -197,7 +179,6 @@ int main()
             
             // control u = th_ddot -> command th_dot
             action = controller(a.alpha, a.alpha_dot, th, th_dot);
-            // action = ticks < EXCITATION_N ? EXCITATION[ticks++] : 0;
             if(action > 1) action = 1;
             if(action < -1) action = -1;
             th_ddot = action*MAX_ACCEL;
@@ -205,21 +186,6 @@ int main()
             if(th_dot > VMAX) th_dot = VMAX;
             if(th_dot < -VMAX) th_dot = -VMAX;
             set_speed(th_dot, pio, sm0);
-
-            // telemetry: one record per tick for core 1 to print. queue_try_add never blocks: if
-            // the queue is full (nobody reading the USB), the record is dropped and counted.
-            record.time_us = t0;
-            record.raw = ok ? (int16_t)raw : -1;        // raw keeps the last good value for alpha
-            record.steps = read_steps(pio, sm1) - steps0;
-            record.v = th_dot;
-            record.action = action;                    // 6c: the controller's action, in [-1, 1]
-            record.alpha = a.alpha;
-            record.alpha_dot = a.alpha_dot;
-            if(time_reached(next)) late++;              // this tick's work used up the whole 10 ms
-            record.late = late;
-            record.dropped = dropped;
-            record.loop_us = (uint16_t)(time_us_32() - t0);
-            if(!queue_try_add(&write_q, &record)) dropped++;
 
             sleep_until(next);
         }
@@ -234,7 +200,5 @@ int main()
             if (key == 'r') st = WAIT;
             
         }
-        
-
     }
 }
