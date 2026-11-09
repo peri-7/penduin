@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <pico/stdlib.h>
 #include <pico/stdio_usb.h>
+#include <pico/multicore.h>
+#include <pico/util/queue.h>
 
 #include "stepper.h"
 #include "encoder.h"
@@ -20,12 +22,45 @@ static float th, th_dot, th_ddot;
 static int32_t steps0;
 static const char *reason = "";
 
-static int cnt = 0, ticks = 0, restart = 0;
+static int cnt = 0, restart = 0;
 static uint16_t raw = 0;
+static uint16_t late = 0, dropped = 0;  // running totals over a RUN, sent with every record
+
+static queue_t write_q, read_q;
 
 typedef enum STATES {
     WAIT, CALIBRATE, RUN, FAULT 
 } state_t;
+
+typedef struct {
+    uint32_t time_us;
+    int16_t raw;
+    int32_t steps;
+    float v;
+    float action;
+    float alpha;
+    float alpha_dot;
+    uint16_t loop_us;
+    uint16_t late;
+    uint16_t dropped;
+} record_t;
+
+
+static void core1_main(void){
+    stdio_init_all();           
+    record_t r;
+    while(true){
+        while(queue_try_remove(&write_q, &r)) 
+            printf("%lu,%d,%ld,%.3f,%.3f,%.4f,%.3f,%u,%u,%u\n", 
+            r.time_us, r.raw, r.steps, r.v, r.action, r.alpha, r.alpha_dot, r.loop_us, r.late, r.dropped);
+        int c = getchar_timeout_us(0);
+        if(c != PICO_ERROR_TIMEOUT) {
+            char k = (char)c;
+            queue_try_add(&read_q, &k);
+        }
+        sleep_ms(1);
+    }
+}
 
 
 int calibrate(){
@@ -36,7 +71,7 @@ int calibrate(){
         next = delayed_by_us(next, DT_US);
         if(read_raw_angle(i2c0, &cal[k]) != 2){
             reason = "read failures";
-            printf("state: calibrate -> read failed during calibration\n");
+            printf("# state: calibrate -> read failed during calibration\n");
             return -1;
         }
         sleep_until(next);
@@ -50,13 +85,14 @@ int calibrate(){
     }
     if(hi - lo > CAL_SPREAD){
         reason = "pend. not still";
-        printf("state: calibrate -> pendulum not still: spread %d counts. Let it settle and run again\n", hi - lo);
+        printf("# state: calibrate -> pendulum not still: spread %d counts. Let it settle and run again\n", hi - lo);
         return 1;
     }
     // compute raw_up and start alpha_t a
     uint16_t raw_down = raw_average(cal, CAL_N);
     a.raw_up = (raw_down + 2048) % 4096;
 
+    printf("# calibration ended -> raw_down: %d / raw_up: %d\n", raw_down, a.raw_up);
     return 0;
 
 }
@@ -64,7 +100,10 @@ int calibrate(){
 int main()
 {
     // init all hardware
-    stdio_init_all();
+    record_t record; char key;
+    queue_init(&write_q, sizeof(record_t), 64); 
+    queue_init(&read_q, sizeof(char), 64);
+    multicore_launch_core1(core1_main);
     while(!stdio_usb_connected()) sleep_ms(100);
     as5600_init(i2c0, baud, SDA_PIN, CLK_PIN);
     init_move_pio(&pio, &sm0);
@@ -78,10 +117,15 @@ int main()
         
         if (st == WAIT){
             // while WAIT, move the arm at theta=0
-            printf("state: wait -> center the arm, then press any key to calibrate and run\n");
-            while(getchar_timeout_us(0) != PICO_ERROR_TIMEOUT); // clear left-over keys
-            getchar();
-            while(getchar_timeout_us(0) != PICO_ERROR_TIMEOUT); // clear left-over keys
+            // The prompt repeats every 2 s, so a serial monitor that connects late still sees it
+            absolute_time_t prompt = get_absolute_time();
+            while(!queue_try_remove(&read_q, &key)){
+                if(time_reached(prompt)){
+                    printf("# state: wait -> center the arm, then press any key to calibrate and run\n");
+                    prompt = make_timeout_time_ms(2000);
+                }
+                sleep_ms(10);
+            }
             st = CALIBRATE;
 
         }
@@ -91,9 +135,11 @@ int main()
             if (err != 0) { reason = "SF failure"; st = FAULT; continue; }
             int c = calibrate();
             if (c == 0) {
+                while(queue_try_remove(&read_q, &key));
                 cnt = 0; th_dot = 0; th_ddot = 0;
                 steps0 = read_steps(pio, sm1);
-                restart = 1; ticks = 0;
+                restart = 1; late = 0; dropped = 0;
+                printf("time_us,raw,steps,v,action,alpha,alpha_dot,loop_us,late,dropped\n");
                 next = get_absolute_time();
                 st = RUN;
             }
@@ -104,16 +150,18 @@ int main()
 
         if (st == RUN){
             next = delayed_by_us(next, DT_US);
+            uint32_t t0 = time_us_32();     // start of this tick's work, for time_us and loop_us
             // stop RUN if key is pressed
-            if (getchar_timeout_us(0) != PICO_ERROR_TIMEOUT){
+            if(queue_try_remove(&read_q, &key)) {
                 set_speed(0, pio, sm0);
                 st = WAIT;
                 continue;
             }
             // read angle 'alpha' and 'theta'
-            if(read_raw_angle(i2c0, &raw) != 2){
+            bool ok = read_raw_angle(i2c0, &raw) == 2;
+            if(!ok){
                 restart = 1;
-                printf("state: run -> read failed during run\n");
+                // printf("state: run -> read failed during run\n");
                 if(++cnt >= FAILED_CNTS){
                     reason = "read failures";
                     st = FAULT;
@@ -135,23 +183,31 @@ int main()
             th_ddot = 0;
             th_dot = th_dot + th_ddot*DT;
             set_speed(th_dot, pio, sm0);
-            
-            // print to test 6a
-            if(++ticks >= 10){
-                printf("alpha: %f / alpha_dot: %f / theta: %f\n", a.alpha, a.alpha_dot, th);
-                ticks = 0;
-            }
-            
+
+            // telemetry: one record per tick for core 1 to print. queue_try_add never blocks: if
+            // the queue is full (nobody reading the USB), the record is dropped and counted.
+            record.time_us = t0;
+            record.raw = ok ? (int16_t)raw : -1;        // raw keeps the last good value for alpha
+            record.steps = read_steps(pio, sm1) - steps0;
+            record.v = th_dot;
+            record.action = 0;                          // 6c: the controller's action, in [-1, 1]
+            record.alpha = a.alpha;
+            record.alpha_dot = a.alpha_dot;
+            if(time_reached(next)) late++;              // this tick's work used up the whole 10 ms
+            record.late = late;
+            record.dropped = dropped;
+            record.loop_us = (uint16_t)(time_us_32() - t0);
+            if(!queue_try_add(&write_q, &record)) dropped++;
+
             sleep_until(next);
         }
 // ------------------------------------------------------------------------       
         if (st == FAULT){
             set_speed(0, pio, sm0);
 
-            printf("state: fault -> reason (%s) -> press 'r' to restart\n", reason);
-            int reset = getchar();
-            while(getchar_timeout_us(0) != PICO_ERROR_TIMEOUT); // clear left-over keys
-            if (reset == 'r') st = WAIT;
+            printf("# state: fault -> reason (%s) -> press 'r' to restart\n", reason);
+            queue_remove_blocking(&read_q, &key);
+            if (key == 'r') st = WAIT;
             
         }
         
