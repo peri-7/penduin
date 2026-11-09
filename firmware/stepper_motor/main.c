@@ -1,6 +1,7 @@
 // control loop
 #include <stdio.h>
 #include <pico/stdlib.h>
+#include <math.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
 #include <pico/util/queue.h>
@@ -195,8 +196,8 @@ int main()
             }
             
             // control u = th_ddot -> command th_dot
-            // action = controller(a.alpha, a.alpha_dot, th, th_dot);
-            action = ticks < EXCITATION_N ? EXCITATION[ticks++] : 0;
+            action = controller(a.alpha, a.alpha_dot, th, th_dot);
+            // action = ticks < EXCITATION_N ? EXCITATION[ticks++] : 0;
             if(action > 1) action = 1;
             if(action < -1) action = -1;
             th_ddot = action*MAX_ACCEL;
