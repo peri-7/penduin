@@ -82,10 +82,27 @@ All sim changes go into one retraining:
 - [x] Bearing friction from the free-swing fit (`python/sysid.py`, part A): `damping="0"`,
   `frictionloss="0.000154"` in `model.xml`. The inertia stays at the OnShape value: the fit only
   scaled it by 0.987, and the mass checks out on a scale (0.023 kg).
-- [ ] VMIN dead band in `step()`: send 0 to the motor while |speed| < 0.1 rad/s, as the firmware
+- [x] VMIN dead band in `step()`: send 0 to the motor while |speed| < 0.1 rad/s, as the firmware
   does. Keep integrating `self.speed`, because the firmware's v keeps integrating too.
+- [x] Experiment B (2026-11-09, `data/expB_*.csv`, `python/excitation.py` + `python/sysid_b.py`):
+  arm doublets with the pendulum hanging, 3 runs, all clean (0 late/dropped/failed, steps back to 0).
+  - **Delay: none.** Whole ticks: 0 fits best (1.1° RMS vs 1.6° at 1 tick). Sub-tick check in 2 ms
+    steps: 0–2 ms equally good, longer worse. So `env.py` needs no action delay.
+  - **Coupling about 9 % weaker than the CAD model**: the fit moves the pendulum's centre of mass
+    along the bearing axis from 14.05 to 6.0 mm (`<inertial pos="-0.074141 0 0.005984">`), and the
+    pendulum RMS goes from 2.0° (model.xml) to 1.1°. Not a delay effect (see above). It may be the
+    real centre of mass, or the arm following the steps less than perfectly; either way it is what
+    makes the sim match. Not applied to `model.xml` yet.
+  - `frictionloss` refit: 1.38e-4, against 1.54e-4 from part A, so the two agree within ~10 %.
+  - The sim arm (velocity servo, `kv=0.05`) gives ±1° (0.35° RMS) around the step count while the
+    pendulum swings. **Keep this actuator**: a stiffer arm fits the real pendulum worse. Tested
+    (scratch scripts, 2026-11-09) with inertia, coupling and friction refitted each time: `kv=0.05`
+    0.8–0.9° RMS; a stepper-like `intvelocity` (kp = 24 N*m/rad from 0.48 N*m × 50 rotor teeth,
+    kv = 0.1) 1.4–1.6° RMS, and only with implausible values (inertia ×0.87, frictionloss 2.7e-4,
+    against part A's 1.54e-4); a 10× stiffer velocity servo chatters on its 0.4 N*m limit at the
+    2 ms timestep. So the real arm gives a little too. A guess, not checked: the TMC2209 lowers its
+    current at standstill (PDN_UART open, see `FirmPlan.md`), which makes it softer while holding.
 - [ ] Lower limits: the motor skipped once at a = 200 rad/s² with v = 20 rad/s (`l`, stage 8), and the
   SAC policies use 200 rad/s² together with 15 rad/s. First test the combination you want to train
   with (`l` stage at that a and v). Keep `VMAX` in `stepper.h` equal to `max_speed`.
-- [ ] Delay and coupling from experiment B (`sysid.py`, part B), once the step 6 skeleton runs.
 - Safety stop on the hardware is ±90°, the same as `th_limit`.

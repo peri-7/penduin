@@ -1,10 +1,10 @@
 // control loop
 #include <stdio.h>
 #include <pico/stdlib.h>
-#include <math.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
 #include <pico/util/queue.h>
+#include <hardware/watchdog.h>
 
 #include "stepper.h"
 #include "encoder.h"
@@ -64,7 +64,7 @@ static void core1_main(void){
 }
 
 static float controller(float a, float a_dot, float th, float th_dot){
-    return 0; //placeholder
+    return 0.01; // placeholder for tests
 }
 
 
@@ -113,6 +113,7 @@ int main()
     queue_init(&read_q, sizeof(char), 64);
     multicore_launch_core1(core1_main);
     while(!stdio_usb_connected()) sleep_ms(100);
+    if(watchdog_enable_caused_reboot()) printf("# rebooted by watchdog\n");
     as5600_init(i2c0, baud, SDA_PIN, CLK_PIN);
     init_move_pio(&pio, &sm0);
     init_read_pio(&pio, &sm1);
@@ -123,6 +124,7 @@ int main()
     while (true) {
 // ------------------------------------------------------------------------        
         if (st == WAIT){
+            watchdog_disable();
             // while WAIT, move the arm at theta=0
             absolute_time_t prompt = get_absolute_time();
             while(!queue_try_remove(&read_q, &key)){
@@ -146,6 +148,7 @@ int main()
                 steps0 = read_steps(pio, sm1);
                 restart = 1; late = 0; dropped = 0;
                 printf("time_us,raw,steps,v,action,alpha,alpha_dot,loop_us,late,dropped\n");
+                watchdog_enable(50, true);
                 next = get_absolute_time();
                 st = RUN;
             }
@@ -155,9 +158,11 @@ int main()
 // ------------------------------------------------------------------------        
         if (st == RUN){
             next = delayed_by_us(next, DT_US);
+            watchdog_update();
             uint32_t t0 = time_us_32();     // start of this tick's work, for time_us and loop_us
             // stop RUN if key is pressed
             if(queue_try_remove(&read_q, &key)) {
+                if(key == 'w') while(1) ; // watchdog test
                 set_speed(0, pio, sm0);
                 st = WAIT;
                 continue;
@@ -217,8 +222,10 @@ int main()
 
             sleep_until(next);
         }
+        
 // ------------------------------------------------------------------------       
         if (st == FAULT){
+            watchdog_disable();
             set_speed(0, pio, sm0);
 
             printf("# state: fault -> reason (%s) -> press 'r' to restart\n", reason);
