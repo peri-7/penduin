@@ -47,7 +47,6 @@ typedef struct {
 
 
 static void core1_main(void){
-    stdio_init_all();           
     record_t r;
     while(true){
         while(queue_try_remove(&write_q, &r)) 
@@ -101,6 +100,8 @@ int main()
 {
     // init all hardware
     record_t record; char key;
+    // stdio_usb_init() must run on core 0 (it owns the default alarm pool), or it returns false and USB never enumerates
+    stdio_init_all();
     queue_init(&write_q, sizeof(record_t), 64); 
     queue_init(&read_q, sizeof(char), 64);
     multicore_launch_core1(core1_main);
