@@ -5,8 +5,13 @@
 #include <pico/stdlib.h>
 #include <hardware/pio.h>
 
+#define PI 3.14159265f
+
 #define PIO_FREQ 10000000.0f // SM cycles per second: 150 MHz / clkdiv 15
 #define VMAX 20.0f
+#define VMIN 0.1 // low VMIN -> high speed resolution, low time resolution
+#define MAX_ACCEL 200
+#define TH_LIMIT = PI/2
 
 void set_MS();
 

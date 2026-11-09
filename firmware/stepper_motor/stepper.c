@@ -4,7 +4,6 @@
 #include "move.pio.h"
 #include "read.pio.h"
 
-#define PI 3.14159265f
 
 #define STEP_PIN 5
 #define DIR_PIN 4
@@ -14,8 +13,6 @@
 
 #define MICROSTEP 16
 #define STEPS_REV (200*MICROSTEP)
-#define VMIN 0.1f      // below this the motor stops (dead band); also absorbs float round-off
-// low VMIN -> high speed resolution / low time resolution
 #define PIO_OVERHEAD 9      // cycles per period outside the wait loop: period = N + 9
 
 

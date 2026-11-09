@@ -652,6 +652,15 @@ This session took the hardware from the breadboard to a soldered circuit, with e
 - [ ] **To-do:** write CONF SF = 2× at start-up (control firmware), and confirm the α sign in the
   sim viewer
 - [x] Soldered on perfboard: Pico + TMC2209, then the AS5600, all tests rerun (2026-11-08)
-- [ ] Control loop skeleton + telemetry on core 1
+- [x] 6a control loop skeleton (`main.c`: WAIT, CALIBRATE, RUN, FAULT), hardware tests passed
+  (2026-11-09). The SDA-pull test was skipped (soldered); software fault injection is set aside
+- [x] 6b telemetry: record queue core 0 → core 1, keys core 1 → core 0 (`queue_t`). Idle test passed
+  (2026-11-09, `data/telemetry_idle_test.csv`, 30.7 s): tick 10000 ± 2 µs, `loop_us` 505–510, 0 late,
+  0 dropped. `stdio_init_all()` stays on core 0: the USB interrupts there cost no measurable jitter.
+  Isolation (Ctrl+Z on `log_serial.py` for ~199 s, port open): `late` 0 and `loop_us` unchanged
+  afterwards, so core 0 is never stalled. `dropped` stays 0 because the SDK's USB `printf` gives up
+  after 500 ms (`PICO_STDIO_USB_STDOUT_TIMEOUT_US`) and then discards output, and the 64-record queue
+  covers that one stall. **Lost data shows only as a `time_us` gap and possibly one cut-off line**, so
+  loaders must skip lines that don't have all 10 fields and check for gaps
 - [ ] Time the 256×256 policy on the Pico, decide the network size
 - [ ] Free-swing test, LQR, RL policy

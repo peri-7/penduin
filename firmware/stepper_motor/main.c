@@ -18,7 +18,7 @@
 static PIO pio;
 static uint sm0, sm1, baud = 100*1000;
 static alpha_t a;
-static float th, th_dot, th_ddot;
+static float th, th_dot, th_ddot, action;
 static int32_t steps0;
 static const char *reason = "";
 
@@ -60,6 +60,11 @@ static void core1_main(void){
         sleep_ms(1);
     }
 }
+
+static float controller(float a, float a_dot, float th, float th_dot){
+    return 0.001; //placeholder
+}
+
 
 
 int calibrate(){
@@ -114,11 +119,9 @@ int main()
 
     absolute_time_t next = get_absolute_time();
     while (true) {
-
-        
+// ------------------------------------------------------------------------        
         if (st == WAIT){
             // while WAIT, move the arm at theta=0
-            // The prompt repeats every 2 s, so a serial monitor that connects late still sees it
             absolute_time_t prompt = get_absolute_time();
             while(!queue_try_remove(&read_q, &key)){
                 if(time_reached(prompt)){
@@ -136,7 +139,7 @@ int main()
             if (err != 0) { reason = "SF failure"; st = FAULT; continue; }
             int c = calibrate();
             if (c == 0) {
-                while(queue_try_remove(&read_q, &key));
+                while(queue_try_remove(&read_q, &key)); // empty queue
                 cnt = 0; th_dot = 0; th_ddot = 0;
                 steps0 = read_steps(pio, sm1);
                 restart = 1; late = 0; dropped = 0;
@@ -148,7 +151,6 @@ int main()
             else st = FAULT; 
         }
 // ------------------------------------------------------------------------        
-
         if (st == RUN){
             next = delayed_by_us(next, DT_US);
             uint32_t t0 = time_us_32();     // start of this tick's work, for time_us and loop_us
@@ -179,10 +181,20 @@ int main()
                     alpha_update(&a, raw, DT);
             }
             th = steps2rad(pio, sm1, steps0);
+            if(fabsf(th) > TH_LIMIT){
+                reason = "theta passed the limit";
+                st = FAULT;
+                continue;                
+            }
             
             // control u = th_ddot -> command th_dot
-            th_ddot = 0;
+            action = controller(a.alpha, a.alpha_dot, th, th_dot);
+            if(action > 1) action = 1;
+            if(action < -1) action = -1;
+            th_ddot = action*MAX_ACCEL;
             th_dot = th_dot + th_ddot*DT;
+            if(th_dot > 20) th_dot = 20;
+            if(th_dot < -20) th_dot = -20;
             set_speed(th_dot, pio, sm0);
 
             // telemetry: one record per tick for core 1 to print. queue_try_add never blocks: if
@@ -191,7 +203,7 @@ int main()
             record.raw = ok ? (int16_t)raw : -1;        // raw keeps the last good value for alpha
             record.steps = read_steps(pio, sm1) - steps0;
             record.v = th_dot;
-            record.action = 0;                          // 6c: the controller's action, in [-1, 1]
+            record.action = action;                    // 6c: the controller's action, in [-1, 1]
             record.alpha = a.alpha;
             record.alpha_dot = a.alpha_dot;
             if(time_reached(next)) late++;              // this tick's work used up the whole 10 ms
