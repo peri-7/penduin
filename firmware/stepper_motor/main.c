@@ -1,6 +1,7 @@
 // control loop
 #include <stdio.h>
 #include <pico/stdlib.h>
+#include <math.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
 #include <pico/util/queue.h>
@@ -23,7 +24,7 @@ static float th, th_dot, th_ddot, action;
 static int32_t steps0;
 static const char *reason = "";
 
-static int cnt = 0, restart = 0;
+static int cnt = 0, restart = 0, ticks = 0;
 static uint16_t raw = 0;
 static uint16_t late = 0, dropped = 0;  // running totals over a RUN, sent with every record
 
@@ -141,7 +142,7 @@ int main()
             int c = calibrate();
             if (c == 0) {
                 while(queue_try_remove(&read_q, &key)); // empty queue
-                cnt = 0; th_dot = 0; th_ddot = 0;
+                cnt = 0; th_dot = 0; th_ddot = 0; ticks = 0;
                 steps0 = read_steps(pio, sm1);
                 restart = 1; late = 0; dropped = 0;
                 printf("time_us,raw,steps,v,action,alpha,alpha_dot,loop_us,late,dropped\n");
@@ -190,7 +191,7 @@ int main()
             
             // control u = th_ddot -> command th_dot
             // action = controller(a.alpha, a.alpha_dot, th, th_dot);
-            action = k < EXCITATION_N ? EXCITATION[k++] : 0;
+            action = ticks < EXCITATION_N ? EXCITATION[ticks++] : 0;
             if(action > 1) action = 1;
             if(action < -1) action = -1;
             th_ddot = action*MAX_ACCEL;
