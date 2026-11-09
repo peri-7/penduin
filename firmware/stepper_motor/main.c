@@ -1,5 +1,6 @@
 // control loop
 #include <stdio.h>
+#include <math.h>
 #include <pico/stdlib.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
@@ -62,7 +63,7 @@ static void core1_main(void){
 }
 
 static float controller(float a, float a_dot, float th, float th_dot){
-    return 0.001; //placeholder
+    return -0.001; //placeholder
 }
 
 

@@ -11,7 +11,7 @@
 #define VMAX 20.0f
 #define VMIN 0.1 // low VMIN -> high speed resolution, low time resolution
 #define MAX_ACCEL 200
-#define TH_LIMIT = PI/2
+#define TH_LIMIT PI/2
 
 void set_MS();
 
