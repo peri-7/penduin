@@ -1,6 +1,5 @@
 // control loop
 #include <stdio.h>
-#include <math.h>
 #include <pico/stdlib.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
@@ -8,6 +7,7 @@
 
 #include "stepper.h"
 #include "encoder.h"
+#include "excitation.h"
 
 #define DT_US 10000
 #define DT (DT_US * 1e-6f)
@@ -63,7 +63,7 @@ static void core1_main(void){
 }
 
 static float controller(float a, float a_dot, float th, float th_dot){
-    return -0.001; //placeholder
+    return 0; //placeholder
 }
 
 
@@ -189,13 +189,14 @@ int main()
             }
             
             // control u = th_ddot -> command th_dot
-            action = controller(a.alpha, a.alpha_dot, th, th_dot);
+            // action = controller(a.alpha, a.alpha_dot, th, th_dot);
+            action = k < EXCITATION_N ? EXCITATION[k++] : 0;
             if(action > 1) action = 1;
             if(action < -1) action = -1;
             th_ddot = action*MAX_ACCEL;
             th_dot = th_dot + th_ddot*DT;
-            if(th_dot > 20) th_dot = 20;
-            if(th_dot < -20) th_dot = -20;
+            if(th_dot > VMAX) th_dot = VMAX;
+            if(th_dot < -VMAX) th_dot = -VMAX;
             set_speed(th_dot, pio, sm0);
 
             // telemetry: one record per tick for core 1 to print. queue_try_add never blocks: if
