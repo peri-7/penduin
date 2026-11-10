@@ -127,9 +127,12 @@ class PenduinEnv(gym.Env):
         mujoco.mj_resetData(self.model, self.data)
         # self.cnt = 0
         
+        alpha0 = np.pi        
+        if options is not None:
+            alpha0 = options.get("alpha0", np.pi)
         # starting state
         self.data.qpos[0] = 0 # theta
-        self.data.qpos[1] = np.pi + self.np_random.uniform(low=-0.1, high=0.1) # alpha
+        self.data.qpos[1] = alpha0 + self.np_random.uniform(low=-0.1, high=0.1) # alpha
         self.data.qvel[:] = 0.0
         self.a_prev = self._read_alpha()
         self.speed = 0
