@@ -50,7 +50,9 @@ static void core1_main(void){
 }
 
 static float controller(float a, float a_dot, float th, float th_dot){
-    return 0.0; // placeholder for tests
+    if (fabs(a) < 0.15) 
+        return -(-8.61077392*th + 398.98540392*a  -6.56925727*th_dot + 33.09880381*a_dot); // placeholder for tests
+    else return 0;
 }
 
 
@@ -92,7 +94,7 @@ int calibrate(){
 int main()
 {
     // init all hardware
-    char key;
+    char key = 'a';
     // stdio_usb_init() must run on core 0 (it owns the default alarm pool), or it returns false and USB never enumerates
     stdio_init_all();
     queue_init(&write_q, sizeof(char), 64); 
@@ -115,7 +117,7 @@ int main()
             absolute_time_t prompt = get_absolute_time();
             while(!queue_try_remove(&read_q, &key)){
                 if(time_reached(prompt)){
-                    printf("# state: wait -> center the arm, then press any key to calibrate and run\n");
+                    printf("# state: wait -> center the arm, then press s to calibrate and run\n");
                     prompt = make_timeout_time_ms(2000);
                 }
                 sleep_ms(10);
@@ -179,10 +181,10 @@ int main()
             
             // control u = th_ddot -> command th_dot
             action = controller(a.alpha, a.alpha_dot, th, th_dot);
-            if(action > 1) action = 1;
+            /*if(action > 1) action = 1;
             if(action < -1) action = -1;
-            th_ddot = action*MAX_ACCEL;
-            th_dot = th_dot + th_ddot*DT;
+            th_ddot = action*MAX_ACCEL;*/
+            th_dot = th_dot + action*DT;
             if(th_dot > VMAX) th_dot = VMAX;
             if(th_dot < -VMAX) th_dot = -VMAX;
             set_speed(th_dot, pio, sm0);
