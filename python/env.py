@@ -4,7 +4,7 @@ import mujoco
 
 class PenduinEnv(gym.Env):
 
-    def __init__(self, xml_path, mode="quad"):
+    def __init__(self, xml_path, mode="exp"):
         super().__init__()
 
         # model from mujoco
@@ -16,7 +16,7 @@ class PenduinEnv(gym.Env):
         self.frame_skip = round(1/(self.model.opt.timestep * freq))
         # self.max_steps = 1000
         self.dt = self.frame_skip * self.model.opt.timestep
-        self.max_accel = 200
+        self.max_accel = 150
         self.max_speed = self.model.actuator_ctrlrange[0, 1]
         self.min_speed = 0.1
         self.th_limit = np.pi/2
@@ -76,13 +76,15 @@ class PenduinEnv(gym.Env):
         
         # positive quadratic (LQR inspired)
         if self.mode == "quad":
-            Q, R = 0.05, 0.01
+            Q, R = 1/(15**2), 1/(150**2)
             reward = (1+cosa)/2 - R*action**2 - Q*th**2
 
         
         # Gaussian/Exponential (PILCO: A Model-Based and Data-Efficient Approach to Policy Search) 
         if self.mode == "exp":
-            Q, R = 0.05, 0.01
+            # Q, R = 1/(15**2), 1/(150**2)
+            # Q, R = 0.05, 0.01
+            Q, R = 0.1, 0.01
             cost = ( a**2 + R*action**2 + Q*th**2 )
             reward = np.exp(-cost)
 

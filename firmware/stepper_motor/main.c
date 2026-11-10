@@ -9,6 +9,7 @@
 
 #include "stepper.h"
 #include "encoder.h"
+#include "agent.h"
 
 #define DT_US 10000
 #define DT (DT_US * 1e-6f)
@@ -33,13 +34,20 @@ typedef enum STATES {
     WAIT, CALIBRATE, RUN, FAULT 
 } state_t;
 
-
+typedef struct {
+    uint32_t t_us; 
+    float a;
+    float a_dot;
+    float th;
+    float th_dot;
+    float action;
+} obs_t;
 
 static void core1_main(void){
     while(true){
-        char msg; // placeholder in case we need it, perhaps the observation space
-        while(queue_try_remove(&write_q, &msg)) 
-            printf("%c", msg); 
+        obs_t obs; // placeholder in case we need it, perhaps the observation space
+        while(queue_try_remove(&write_q, &obs)) 
+            printf("%lu,%f,%f,%f,%f,%f\n", (unsigned long)obs.t_us, obs.a, obs.a_dot, obs.th, obs.th_dot, obs.action);
         int c = getchar_timeout_us(0);
         if(c != PICO_ERROR_TIMEOUT) {
             char k = (char)c;
@@ -48,14 +56,43 @@ static void core1_main(void){
         sleep_ms(1);
     }
 }
-
+/*  Given by the agent.c script now
 static float controller(float a, float a_dot, float th, float th_dot){
     if (fabs(a) < 0.15) 
         return -(-8.61077392*th + 398.98540392*a  -6.56925727*th_dot + 33.09880381*a_dot); // placeholder for tests
     else return 0;
+} */
+
+
+
+// Bench check of the exported network, run once at boot with the motor still.
+// Expected values for checkpoints/sac_QR101_675000_steps (recompute them for another model):
+//   +0.988925, -0.516716, +0.466328, -0.923270
+static void agent_selftest(void){
+    const float in[4][4] = {    // a, a_dot, th, th_dot (raw rad, rad/s: controller() scales them)
+        { 3.141593f,  0.0f,  0.0f,  0.0f},
+        { 0.1f,       0.5f,  0.2f,  1.0f},
+        {-0.05f,     -1.0f, -0.3f, -2.0f},
+        { 2.0f,       5.0f,  0.5f,  8.0f},
+    };
+    for(int k=0; k<4; k++)
+        printf("# selftest: controller(%f, %f, %f, %f) = %f\n", in[k][0], in[k][1], in[k][2], in[k][3],
+               controller(in[k][0], in[k][1], in[k][2], in[k][3]));
+
+    // time 100 calls: mean and worst case
+    uint32_t total = 0, worst = 0;
+    float sink = 0;     // printed, so the calls can't be optimized away
+    for(int k=0; k<100; k++){
+        const float *x = in[k % 4];
+        uint32_t t0 = time_us_32();
+        sink += controller(x[0], x[1], x[2], x[3]);
+        uint32_t d = time_us_32() - t0;
+        total += d;
+        if(d > worst) worst = d;
+    }
+    printf("# selftest: controller() mean %.1f us, worst %lu us (sink %f)\n",
+           total / 100.0f, (unsigned long)worst, sink);
 }
-
-
 
 int calibrate(){
     // take 100 measurments of raw_down
@@ -94,10 +131,10 @@ int calibrate(){
 int main()
 {
     // init all hardware
-    char key = 'a';
+    char key = 'a'; obs_t obs;
     // stdio_usb_init() must run on core 0 (it owns the default alarm pool), or it returns false and USB never enumerates
     stdio_init_all();
-    queue_init(&write_q, sizeof(char), 64); 
+    queue_init(&write_q, sizeof(obs_t), 64); 
     queue_init(&read_q, sizeof(char), 64);
     multicore_launch_core1(core1_main);
     while(!stdio_usb_connected()) sleep_ms(100);
@@ -105,6 +142,7 @@ int main()
     as5600_init(i2c0, baud, SDA_PIN, CLK_PIN);
     init_move_pio(&pio, &sm0);
     init_read_pio(&pio, &sm1);
+    agent_selftest();
     state_t st = WAIT;
 
 
@@ -136,6 +174,7 @@ int main()
                 th_dot = 0; th_ddot = 0; 
                 steps0 = read_steps(pio, sm1);
                 
+                printf("t_us,alpha,alpha_dot,theta,theta_dot,action\n");
                 watchdog_enable(50, true);
                 next = get_absolute_time();
                 st = RUN;
@@ -181,13 +220,20 @@ int main()
             
             // control u = th_ddot -> command th_dot
             action = controller(a.alpha, a.alpha_dot, th, th_dot);
-            /*if(action > 1) action = 1;
+            if(action > 1) action = 1;
             if(action < -1) action = -1;
-            th_ddot = action*MAX_ACCEL;*/
-            th_dot = th_dot + action*DT;
+            th_ddot = action*MAX_ACCEL;
+            th_dot = th_dot + th_ddot*DT;
             if(th_dot > VMAX) th_dot = VMAX;
             if(th_dot < -VMAX) th_dot = -VMAX;
             set_speed(th_dot, pio, sm0);
+
+            // telemetry: queued here, printed by core 1 (never print on core 0 in RUN)
+            obs.t_us = time_us_32();
+            obs.a = a.alpha; obs.a_dot = a.alpha_dot;
+            obs.th = th; obs.th_dot = th_dot;
+            obs.action = action;
+            queue_try_add(&write_q, &obs);
 
             sleep_until(next);
         }

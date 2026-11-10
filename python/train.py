@@ -10,12 +10,12 @@ if __name__ == "__main__":
 
     # constants
     max_steps = 1000
-    total_steps = 500_000 
+    total_steps = 1_000_000 
     check_freq = 25_000 
     seed = 1
     version = 1
     mode = "exp"
-    name = f"sac_{mode}_{version}_seed{seed}"
+    name = f"sac_QR0501"
     
     # paths
     here = os.path.dirname(os.path.abspath(__file__))
@@ -32,7 +32,8 @@ if __name__ == "__main__":
     print("> Env was wrapped")
 
     # new training
-    agent = SAC("MlpPolicy", env, seed=1, verbose=1, tensorboard_log=runs)
+    policy_kwargs = dict(net_arch=[128, 128])
+    agent = SAC("MlpPolicy", env, seed=seed, verbose=1, policy_kwargs=policy_kwargs, tensorboard_log=runs)
     print(f'''
     > Training starts!
                 > reward: {mode}
