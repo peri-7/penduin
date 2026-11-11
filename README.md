@@ -79,33 +79,57 @@ Nelly Tsimplaki
 Periklis Alexiou
 
 #### references and related work
-documentation:
-https://stable-baselines3.readthedocs.io/en/master/modules/sac.html
-https://mujoco.readthedocs.io/en/stable/XMLreference.html
+Papers:
 
-references:
-https://arxiv.org/abs/1801.01290
-https://www.researchgate.net/publication/221345233_PILCO_A_Model-Based_and_Data-Efficient_Approach_to_Policy_Search
+[1] M. P. Deisenroth and C. E. Rasmussen, “PILCO: A Model-Based and Data-Efficient Approach to Policy Search,” 2011.
 
-datasheets:
-https://www.alldatasheet.com/html-pdf/1260879/PROMOCO/42BYGHW804/345/1/42BYGHW804.html # motor
-https://github.com/bigtreetech/BIGTREETECH-TMC2209-V1.2/blob/master/manual/TMC2209-V1.2-manual.pdf # motor driver
-https://pip-assets.raspberrypi.com/categories/1088-raspberry-pi-pico-2-w/documents/RP-008304-DS-3-pico-2-w-datasheet.pdf # microcontroller
-https://files.seeedstudio.com/wiki/Grove-12-bit-Magnetic-Rotary-Position-Sensor-AS5600/res/Magnetic%20Rotary%20Position%20Sensor%20AS5600%20Datasheet.pdf # encoder
+[2] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor,” 35th International Conference on Machine Learning, ICML 2018, vol. 5, pp. 2976–2989, Jan. 2018, Accessed: Nov. 11, 2026. [Online]. Available: https://arxiv.org/pdf/1801.01290
 
-inspiring related work:
-https://github.com/EmiliosBlacksea/furuta-pendulum-rl
-https://courses.ece.cornell.edu/ece5990/ECE5725_Fall2019_Projects/Dec_13_Demo/Self-Balance%20Pendulum/bl569_sh974_Friday/index.html
-https://github.com/ferrolho/rotary-inverted-pendulum
 
-enlightening yt videos and articles:
-https://medium.com/geekculture/raspberry-pico-programming-with-pio-state-machines-e4610e6b0f29
-https://www.lazy-automation.com.au/tmc2209-stepper-driver-explained-silent-printing-and-what-it-actually-does
-https://medium.com/@exsenily/soft-actor-critic-sac-for-continuous-control-an-introduction-and-possible-implications-for-5767e4cd620a 
-https://medium.com/@dhananjaysaikumar_44502/mujoco-for-beginners-how-simulation-memory-actually-works-1e2a91c5fe86
-https://towardsai.com/p/artificial-intelligence/quick-start-robotics-and-reinforcement-learning-with-mujoco
-https://www.youtube.com/watch?v=7spK_BkMJys
-https://www.youtube.com/watch?v=yvrpIYc9Ll8
+Documentation:
+
+[3] “XML Reference - MuJoCo Documentation.” Accessed: Nov. 11, 2026. [Online]. Available: https://mujoco.readthedocs.io/en/stable/XMLreference.html
+
+[4] “SAC — Stable Baselines3 2.9.2 documentation.” Accessed: Nov. 11, 2026. [Online]. Available: https://stable-baselines3.readthedocs.io/en/master/modules/sac.html
+
+Datasheets:
+
+[5] ams AG, “ams Datasheet AS5600 12-Bit Programmable Contactless Potentiometer.”Accessed: Nov. 11, 2026. [Online]. Available: 
+https://files.seeedstudio.com/wiki/Grove-12-bit-Magnetic-Rotary-Position-Sensor-AS5600/res/Magnetic%20Rotary%20Position%20Sensor%20AS5600%20Datasheet.pdf
+
+[6] “Raspberry Pi Pico 2W Datasheet - An RP2350-based microcontroller board with wireless.” Accessed: Nov. 11, 2026. [Online]. Available: 
+https://pip-assets.raspberrypi.com/categories/1088-raspberry-pi-pico-2-w/documents/RP-008304-DS-3-pico-2-w-datasheet.pdf
+
+[7] “BIGTREETECH-TMC2209-V1.2. manual.” Accessed: Nov. 11, 2026. [Online]. Available: https://github.com/bigtreetech/BIGTREETECH-TMC2209-V1.2/blob/master/manual/TMC2209-V1.2-manual.pdf
+
+
+[8] “42BYGHW804 datasheet PROMOCO | Hybrid Stepper Motor.” Accessed: Nov. 11, 2026. [Online]. Available: https://www.alldatasheet.com/html-pdf/1260879/PROMOCO/42BYGHW804/345/1/42BYGHW804.html
+
+Related Work:
+
+[9]“EmiliosBlacksea/furuta-pendulum-rl: Edge RL controller for a Furuta pendulum – PPO on Teensy 4.x.” Accessed: Nov. 11, 2026. [Online]. Available: https://github.com/EmiliosBlacksea/furuta-pendulum-rl
+
+[10] “ferrolho/rotary-inverted-pendulum: A £20 open-source rotary inverted pendulum that balances itself with a 689-parameter neural network running standalone on an Arduino Nano.” Accessed: Nov. 11, 2026. [Online]. Available: https://github.com/ferrolho/rotary-inverted-pendulum
+
+[11] “Furuta Pendulum.” Accessed: Nov. 11, 2026. [Online]. Available: https://courses.ece.cornell.edu/ece5990/ECE5725_Fall2019_Projects/Dec_13_Demo/Self-Balance%20Pendulum/bl569_sh974_Friday/index.html
+
+
+Helpful Videos and Articles:
+
+[12] “Raspberry Pico: Programming with PIO State Machines | by Sebastian | Geek Culture | Medium.” Accessed: Nov. 11, 2026. [Online]. Available: https://medium.com/geekculture/raspberry-pico-programming-with-pio-state-machines-e4610e6b0f29
+
+[13]“TMC2209 Stepper Driver Explained: Silent Printing and What It Actually Does - Lazy Automation.” Accessed: Nov. 11, 2026. [Online]. Available: https://www.lazy-automation.com.au/tmc2209-stepper-driver-explained-silent-printing-and-what-it-actually-does
+
+[14] “Soft Actor-Critic (SAC) for Continuous Control: An Introduction with Potential Implications for Bioengineering | by Junkai Wang | Medium.” Accessed: Nov. 11, 2026. [Online]. Available: https://medium.com/@exsenily/soft-actor-critic-sac-for-continuous-control-an-introduction-and-possible-implications-for-5767e4cd620a
+
+[15] “MuJoCo for Beginners: How Simulation Memory Actually Works | by Dhananjay Sai Kumar K | Medium.” Accessed: Nov. 11, 2026. [Online]. Available: https://medium.com/@dhananjaysaikumar_44502/mujoco-for-beginners-how-simulation-memory-actually-works-1e2a91c5fe86
+
+[16]“Quick Start Robotics and Reinforcement Learning with MuJoCo | Towards AI.” Accessed: Nov. 11, 2026. [Online]. Available: https://towardsai.com/p/artificial-intelligence/quick-start-robotics-and-reinforcement-learning-with-mujoco
+
+[17]“Stepper Motors and Arduino - The Ultimate Guide - YouTube.” Accessed: Nov. 11, 2026. [Online]. Available: https://www.youtube.com/watch?v=7spK_BkMJys
+
+[18]“AS5600 magnetic position encoder - best encoder for stepper motors - YouTube.” Accessed: Nov. 11, 2026. [Online]. Available: https://www.youtube.com/watch?v=yvrpIYc9Ll8
+
 
 ##### code
 The code was mostly written by us but there are scripts that we were too bored/tired to write and review at the time, so they are ai-generated. 
