@@ -5,8 +5,7 @@ It is a Furuta pendulum (rotary inverted pendulum) solved with RL.
 The physical plant was built with wood, the arm and the pendulum were 3d-printed and the electronics used are shown in the list.md file.
 
 ## results
-<gif or photos here>
-![Alt text](images/IMG_20261111_183626124.jpg   "pendulum upright with disturbance weight")
+![](./images/IMG_20261111_183626124.jpg)
 
 ## quick start 
 
