@@ -6,6 +6,7 @@ The physical plant was built with wood, the arm and the pendulum were 3d-printed
 
 ## results
 <gif or photos here>
+[alt text](https://github.com/peri-7/penduin/blob/main/images/IMG_20261111_183626124.jpg "pendulum upright with disturbance weight")
 
 ## quick start 
 
@@ -60,6 +61,8 @@ They host each trained model's info, sampled across the training process. The fu
 #### runs/ - data/
 runs/ holds the information for tensorboard to show the progress and data/ holds the csv logs used for system id.
 
+#### images/
+images and videos of build in action.
 
 ## steps
 1. order the components
