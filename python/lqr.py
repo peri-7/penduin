@@ -15,7 +15,7 @@ from gymnasium.wrappers import TimeLimit
 here = os.path.dirname(os.path.abspath(__file__))
 xml = f"{here}/../model.xml"
 m = mujoco.MjModel.from_xml_path(xml)
-data = mujoco.MjData(m)    # the changing state: positions, velocities, controls, ...
+data = mujoco.MjData(m)   
 pend = m.body("pendulum")
 
 

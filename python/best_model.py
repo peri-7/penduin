@@ -47,12 +47,13 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--mode", help="reward function", default="exp", choices=["quad", "exp"])
     parser.add_argument("-s", "--seeds", help="episodes per checkpoint", type=int, default=5)
     parser.add_argument("-u", "--min_up", help="min upright fraction while balancing", type=float, default=0.95)
+    parser.add_argument("-k", "--a_dot_k", help="alpha_dot filter weight the run was trained with (1 = no filter)", type=float, default=1)
     args = parser.parse_args()
 
     here = os.path.dirname(os.path.abspath(__file__))
     xml = f"{here}/../model.xml"
     max_steps = 1000
-    env = PenduinEnv(xml_path=xml, mode=args.mode)
+    env = PenduinEnv(xml_path=xml, mode=args.mode, a_dot_k=args.a_dot_k)
     env = TimeLimit(env, max_episode_steps=max_steps)
 
     # all checkpoints of the run, plus the final model if it exists
@@ -89,4 +90,4 @@ if __name__ == "__main__":
     for i in order[:5]:
         print(f"  {os.path.basename(names[i]):40s} {rms[i]:8.2f}   {var[i]:8.4f}   rank-sum {rank_sum[i]}")
     best = os.path.relpath(names[order[0]])
-    print(f"\nBest: {best}\nWatch it: python {os.path.relpath(here)}/eval.py -f {best} -m {args.mode} -w")
+    print(f"\nBest: {best}\nWatch it: python {os.path.relpath(here)}/eval.py -f {best} -m {args.mode} -k {args.a_dot_k} -w")

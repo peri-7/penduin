@@ -58,11 +58,12 @@ def run_episode(agent, env, seed=7, viewer=None):
 
 if __name__ == "__main__":
 
-    # i) read args: 1. file 2. watch
+    # i) read args: 1. file 2. watch 3. more were added later
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", help="give model 's file path", required=True)
-    parser.add_argument("-m", "--mode", help="give agent 's reward function", required=True, choices=["quad", "exp"])
+    parser.add_argument("-m", "--mode", help="give agent 's reward function", required=False, choices=["quad", "exp"], default="exp")
     parser.add_argument("-w", "--watch", help="option to watch on mujoco", action='store_true')
+    parser.add_argument("-k", "--a_dot_k", help="alpha_dot filter weight the model was trained with (1 = no filter)", type=float, default=1)
     args = parser.parse_args()
 
 
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     xml = f"{here}/../model.xml"
     max_steps = 1000
-    env = PenduinEnv(xml_path=xml, mode=args.mode)
+    env = PenduinEnv(xml_path=xml, mode=args.mode, a_dot_k=args.a_dot_k)
     env = TimeLimit(env, max_episode_steps=max_steps)
 
     # iii) run the episode

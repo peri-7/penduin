@@ -39,7 +39,7 @@ def export_weights(agent, filename="weights.h"):
 if __name__ == "__main__":
 
     here = os.path.dirname(os.path.abspath(__file__))
-    model = f"{here}/../checkpoints/sac_QR101_675000_steps.zip"
+    model = f"{here}/../models/sac_QR101_675000_steps.zip"
     filename = f"{here}/../firmware/stepper_motor/weights.h"
     
     agent = SAC.load(model)

@@ -7,10 +7,10 @@
 
 float controller(float a, float a_dot, float th, float th_dot){
 
-    // same order and scaling as env.py _get_obs()
+
     float state[OBS_DIM] = { sinf(a), cosf(a), th/TH_LIMIT, a_dot/A_DOT_DENOM, th_dot/VMAX };
 
-    // static: 1 KB in RAM instead of on the small (2 KB) core 0 stack
+
     static float hidden1[HID_DIM];
     static float hidden2[HID_DIM];
     

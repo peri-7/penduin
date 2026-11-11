@@ -4,7 +4,7 @@ import mujoco
 
 class PenduinEnv(gym.Env):
 
-    def __init__(self, xml_path, mode="exp"):
+    def __init__(self, xml_path, mode="exp", a_dot_k=1):
         super().__init__()
 
         # model from mujoco
@@ -21,6 +21,7 @@ class PenduinEnv(gym.Env):
         self.min_speed = 0.1
         self.th_limit = np.pi/2
         self.a_dot_denom = 20
+        self.a_dot_k = a_dot_k # low-pass weight on the newest alpha_dot sample (1 = no filter)
         self.mode = mode
                 
         # action space: u = [ theta_ddot ]
@@ -35,6 +36,7 @@ class PenduinEnv(gym.Env):
             low=-obs_limit, high=obs_limit, shape=(5,), dtype=np.float32
         )
         self.a_prev = 0
+        self.a_dot_f = 0 # filtered alpha_dot (rad/s)
         self.speed = 0
         # self.cnt = 0
 
@@ -54,6 +56,9 @@ class PenduinEnv(gym.Env):
 
         # alpha dot (normalized) - empirically, might changed denominator later
         a_dot = ((a - self.a_prev + np.pi)%(2*np.pi) - np.pi)/self.dt
+        # first-order low-pass (EMA) 
+        self.a_dot_f = (1 - self.a_dot_k)*self.a_dot_f + self.a_dot_k*a_dot
+        a_dot = self.a_dot_f
         a_dot /= self.a_dot_denom
         self.a_prev = a
 
@@ -137,6 +142,7 @@ class PenduinEnv(gym.Env):
         self.data.qpos[1] = alpha0 + self.np_random.uniform(low=-0.1, high=0.1) # alpha
         self.data.qvel[:] = 0.0
         self.a_prev = self._read_alpha()
+        self.a_dot_f = 0
         self.speed = 0
         mujoco.mj_forward(self.model, self.data)
 
