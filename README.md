@@ -6,7 +6,7 @@ The physical plant was built with wood, the arm and the pendulum were 3d-printed
 
 ## results
 <gif or photos here>
-![alt text](images/IMG_20261111_183626124.jpg "pendulum upright with disturbance weight")
+![alt text](images/IMG_20261111_183626124.jpg)
 
 ## quick start 
 
