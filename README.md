@@ -132,7 +132,7 @@ Helpful Videos and Articles:
 
 
 ##### code
-The code was mostly written by us but there are scripts that we were too bored/tired to write and review at the time, so they are ai-generated. 
+The code was mostly written by us but there are scripts for which we gave in to the temptation of ai-generation.
 These are the following scripts, so mistakes might exist:
 firmware/{encoder_test.c, motor_test.c, swing_log.c}
 python/{best_model.py, excitation.py, log_serial.py, sysid.py, sysid_b.py}
